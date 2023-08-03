@@ -12,7 +12,7 @@ logger = logging.getLogger('oec.args')
 def parse_args(args, is_vt100_available):
     parser = argparse.ArgumentParser(description='IBM 3270 terminal controller')
 
-    parser.add_argument('serial_port', help='serial port')
+    parser.add_argument('interface', help='serial port name or interface URL')
 
     subparsers = parser.add_subparsers(dest='emulator', required=True,
                                        description='emulator')

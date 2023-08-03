@@ -16,7 +16,7 @@ class ExecuteError(Exception):
         if len(errors) == 1:
             message = str(errors[0])
         else:
-            message = f'{len(errors)} occurred'
+            message = f'{len(errors)} errors occurred'
 
         super().__init__(message)
 
@@ -27,7 +27,7 @@ class InterfaceWrapper:
     def __init__(self, interface):
         self.interface = interface
 
-        self.timeout = 0.001
+        self.timeout = 0.1
 
         self.jumbo_write_strategy = _get_jumbo_write_strategy()
         self.jumbo_write_max_length = None
@@ -40,7 +40,7 @@ class InterfaceWrapper:
 
     def __getattr__(self, attr):
         if attr == 'identifier':
-            return self.interface.serial.port
+            return self.interface.identifier()
 
         return getattr(self.interface, attr)
 

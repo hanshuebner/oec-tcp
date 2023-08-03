@@ -1,8 +1,11 @@
+import re
 import sys
 import os
 import signal
 import logging
-from coax import open_serial_interface, TerminalType
+from socket import socket
+
+from coax import open_serial_interface, open_http_interface, TerminalType
 
 from .args import parse_args
 from .interface import InterfaceWrapper
@@ -95,7 +98,17 @@ def main():
 
     logger.info('Starting controller...')
 
-    with open_serial_interface(args.serial_port) as interface:
+    if re.match('^https?://', args.interface):
+        interface_opener = open_http_interface
+        interface_spec = args.interface
+    elif re.match('^.*:\d+$', args.interface):
+        interface_opener = open_http_interface
+        interface_spec = 'http://{0}/transact'.format(args.interface)
+    else:
+        interface_opener = open_serial_interface
+        interface_spec = args.interface
+
+    with interface_opener(interface_spec) as interface:
         controller = Controller(InterfaceWrapper(interface), create_device, create_session)
 
         def signal_handler(_number, _frame):
