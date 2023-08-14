@@ -255,7 +255,7 @@ class PollAttachedDevicesTestCase(unittest.TestCase):
         self.assertEqual(poll.call_count, 2)
         self.interface.assert_command_executed(None, PollAck)
 
-class PollNextDetatchedDeviceTestCase(unittest.TestCase):
+class PollNextdetachedDeviceTestCase(unittest.TestCase):
     def setUp(self):
         self.interface = MockInterface()
 
@@ -271,64 +271,64 @@ class PollNextDetatchedDeviceTestCase(unittest.TestCase):
 
     def test_poll_period_not_expired(self):
         # Arrange
-        self.controller.detatched_poll_period = 0.5
-        self.controller.last_detatched_poll_time = 1.0
+        self.controller.detached_poll_period = 0.5
+        self.controller.last_detached_poll_time = 1.0
 
         self.perf_counter.return_value = 1.1
 
         # Act
-        self.controller._poll_next_detatched_device()
+        self.controller._poll_next_detached_device()
 
         # Assert
         self.interface.assert_command_not_executed(None, Poll)
 
-        self.assertEqual(self.controller.last_detatched_poll_time, 1.0)
+        self.assertEqual(self.controller.last_detached_poll_time, 1.0)
 
     def test_empty_queue_that_remains_empty(self):
         # Arrange
-        self.controller._get_detatched_device_addresses = Mock(return_value=[])
+        self.controller._get_detached_device_addresses = Mock(return_value=[])
 
         # Act
-        self.controller._poll_next_detatched_device()
+        self.controller._poll_next_detached_device()
 
         # Assert
         self.interface.assert_command_not_executed(None, Poll)
 
-        self.controller._get_detatched_device_addresses.assert_called_once()
+        self.controller._get_detached_device_addresses.assert_called_once()
 
     def test_empty_queue_that_is_populated(self):
         # Arrange
-        self.controller._get_detatched_device_addresses = Mock(return_value=[None])
+        self.controller._get_detached_device_addresses = Mock(return_value=[None])
 
         # Act
-        self.controller._poll_next_detatched_device()
+        self.controller._poll_next_detached_device()
 
         # Assert
         self.interface.assert_command_executed(None, Poll)
 
-        self.controller._get_detatched_device_addresses.assert_called_once()
+        self.controller._get_detached_device_addresses.assert_called_once()
 
     def test_non_empty_queue(self):
         # Arrange
         self.interface.mock_responses = [(0b000000, Poll, None, ReceiveTimeout)]
 
-        self.controller.detatched_device_poll_queue = [0b000000, 0b100000]
+        self.controller.detached_device_poll_queue = [0b000000, 0b100000]
 
-        self.controller._get_detatched_device_addresses = Mock()
+        self.controller._get_detached_device_addresses = Mock()
 
         # Act
-        self.controller._poll_next_detatched_device()
+        self.controller._poll_next_detached_device()
 
         # Assert
         self.interface.assert_command_executed(0b000000, Poll)
 
-        self.assertEqual(self.controller.detatched_device_poll_queue, [0b100000])
+        self.assertEqual(self.controller.detached_device_poll_queue, [0b100000])
 
-        self.controller._get_detatched_device_addresses.assert_not_called()
+        self.controller._get_detached_device_addresses.assert_not_called()
 
     def test_device_found(self):
         # Arrange
-        self.controller.detatched_device_poll_queue = [None]
+        self.controller.detached_device_poll_queue = [None]
 
         poll_response = PowerOnResetCompletePollResponse(0xa)
 
@@ -339,7 +339,7 @@ class PollNextDetatchedDeviceTestCase(unittest.TestCase):
         self.controller._handle_device_found = Mock()
 
         # Act
-        self.controller._poll_next_detatched_device()
+        self.controller._poll_next_detached_device()
 
         # Assert
         self.controller._handle_device_found.assert_called_once_with(None, poll_response)

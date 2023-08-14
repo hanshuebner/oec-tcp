@@ -37,7 +37,7 @@ class Controller:
         self.create_session = create_session
 
         self.devices = { }
-        self.detatched_device_poll_queue = []
+        self.detached_device_poll_queue = []
 
         self.sessions = { }
         self.session_selector = None
@@ -46,7 +46,7 @@ class Controller:
         # Target time between POLL commands in seconds when a device is attached or
         # no device is attached.
         self.attached_poll_period = 1 / 15
-        self.detatched_poll_period = 1 / 2
+        self.detached_poll_period = 1 / 2
 
         # Maximum number of POLL commands to execute, per attached device, per run
         # loop iteration. If all attached devices respond with TT/AR the run loop
@@ -56,7 +56,7 @@ class Controller:
         self.poll_depth = 3
 
         self.last_attached_poll_time = None
-        self.last_detatched_poll_time = None
+        self.last_detached_poll_time = None
 
     def run(self):
         """Run the controller."""
@@ -84,7 +84,7 @@ class Controller:
         self.sessions.clear()
 
         self.devices.clear()
-        self.detatched_device_poll_queue.clear()
+        self.detached_device_poll_queue.clear()
 
         self.logger.info('Controller stopped')
 
@@ -108,7 +108,7 @@ class Controller:
 
         # POLL devices.
         self._poll_attached_devices()
-        self._poll_next_detatched_device()
+        self._poll_next_detached_device()
 
     def _update_sessions(self, duration):
         start_time = time.perf_counter()
@@ -264,17 +264,17 @@ class Controller:
             if not handleable_poll_responses:
                 break
 
-    def _poll_next_detatched_device(self):
-        if self.last_detatched_poll_time is not None and (time.perf_counter() - self.last_detatched_poll_time) < self.detatched_poll_period:
+    def _poll_next_detached_device(self):
+        if self.last_detached_poll_time is not None and (time.perf_counter() - self.last_detached_poll_time) < self.detached_poll_period:
             return
 
-        self.last_detatched_poll_time = time.perf_counter()
+        self.last_detached_poll_time = time.perf_counter()
 
-        if not self.detatched_device_poll_queue:
-            self.detatched_device_poll_queue = list(self._get_detatched_device_addresses())
+        if not self.detached_device_poll_queue:
+            self.detached_device_poll_queue = list(self._get_detached_device_addresses())
 
         try:
-            device_address = self.detatched_device_poll_queue.pop(0)
+            device_address = self.detached_device_poll_queue.pop(0)
         except IndexError:
             return
 
@@ -283,10 +283,10 @@ class Controller:
         except ReceiveTimeout:
             return
         except ReceiveError as error:
-            self.logger.warning(f'POLL detatched device @ {format_address(self.interface, device_address)} receive error: {error}')
+            self.logger.warning(f'POLL detached device @ {format_address(self.interface, device_address)} receive error: {error}')
             return
         except ProtocolError as error:
-            self.logger.warning(f'POLL detatched device @ {format_address(self.interface, device_address)} protocol error: {error}')
+            self.logger.warning(f'POLL detached device @ {format_address(self.interface, device_address)} protocol error: {error}')
             return
 
         if poll_response:
@@ -365,7 +365,7 @@ class Controller:
 
         return max((self.last_attached_poll_time + self.attached_poll_period) - time.perf_counter(), 0)
 
-    def _get_detatched_device_addresses(self):
+    def _get_detached_device_addresses(self):
         attached_addresses = set(self.devices.keys())
 
         # The 3299 is transparent, but if there is at least one device attached to a 3299
