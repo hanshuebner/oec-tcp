@@ -255,7 +255,7 @@ class PollAttachedDevicesTestCase(unittest.TestCase):
         self.assertEqual(poll.call_count, 2)
         self.interface.assert_command_executed(None, PollAck)
 
-class PollNextdetachedDeviceTestCase(unittest.TestCase):
+class PollNextDetachedDeviceTestCase(unittest.TestCase):
     def setUp(self):
         self.interface = MockInterface()
 
