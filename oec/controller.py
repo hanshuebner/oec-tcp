@@ -290,7 +290,11 @@ class Controller:
             return
 
         if poll_response:
-            self.interface.execute(address_commands(device_address, PollAck()))
+            try:
+                self.interface.execute(address_commands(device_address, PollAck()))
+            except ReceiveTimeout:
+                self.logger.warning(f'POLL detached device @ {format_address(self.interface, device_address)} PollAck timeout')
+                return
 
         self._handle_device_found(device_address, poll_response)
 
