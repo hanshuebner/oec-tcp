@@ -26,7 +26,7 @@ from .keymap_3278_typewriter import KEYMAP as KEYMAP_3278_TYPEWRITER
 from .keymap_ibm_typewriter import KEYMAP as KEYMAP_IBM_TYPEWRITER
 from .keymap_ibm_enhanced import KEYMAP as KEYMAP_IBM_ENHANCED
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.getLevelName(os.getenv("OEC_LOG_LEVEL", "INFO")))
 
 logger = logging.getLogger('oec.main')
 
