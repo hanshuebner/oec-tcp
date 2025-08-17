@@ -5,7 +5,7 @@ import signal
 import logging
 from socket import socket
 
-from coax import open_serial_interface, open_http_interface, TerminalType
+from coax import open_serial_interface, open_http_interface, open_tcp_interface, TerminalType
 
 from .args import parse_args
 from .interface import InterfaceWrapper
@@ -101,9 +101,9 @@ def main():
     if re.match('^https?://', args.interface):
         interface_opener = open_http_interface
         interface_spec = args.interface
-    elif re.match('^.*:\d+$', args.interface):
-        interface_opener = open_http_interface
-        interface_spec = 'http://{0}/transact'.format(args.interface)
+    elif re.match('^tcp://.*(|:\d+)$', args.interface):
+        interface_opener = open_tcp_interface
+        interface_spec = re.sub('^tcp://', '', args.interface)
     else:
         interface_opener = open_serial_interface
         interface_spec = args.interface
