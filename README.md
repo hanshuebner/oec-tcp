@@ -1,5 +1,10 @@
 # oec
 
+> ⚠️ This is a temporary fork of
+> [Andrew Kay's](https://github.com/lowobservable/oec) official oec
+> repository with support for the WiFi coax interface developed by
+> me (Hans Hübner).  It will eventually be merged.
+
 IBM 3270 terminal controller - a replacement for the IBM 3174.
 
 ![IBM 3278 terminal and oec](.images/hero.jpg)
