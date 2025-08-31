@@ -58,6 +58,10 @@ class Controller:
         self.last_attached_poll_time = None
         self.last_detached_poll_time = None
 
+        # Track timing between keystrokes
+        self.last_keystroke_time = None
+        self.keystroke_count = 0
+
     def run(self):
         """Run the controller."""
         self.running = True
@@ -260,9 +264,11 @@ class Controller:
         self._terminate_session(session)
 
     def _poll_attached_devices(self):
+        poll_start = time.perf_counter()
         self.last_attached_poll_time = time.perf_counter()
 
-        for _ in range(self.poll_depth):
+        for poll_iteration in range(self.poll_depth):
+            iteration_start = time.perf_counter()
             devices = self.devices.values()
 
             if not devices:
@@ -270,7 +276,9 @@ class Controller:
 
             poll_commands = [address_commands(device.device_address, Poll(device.get_poll_action())) for device in devices]
 
+            poll_execute_start = time.perf_counter()
             poll_responses = list(zip(devices, self.interface.execute(poll_commands, receive_timeout_is_error=False)))
+            poll_execute_time = time.perf_counter()
 
             # Handle POLL responses.
             handleable_poll_responses = [pair for pair in poll_responses if pair[1] is not None and not isinstance(pair[1], ReceiveTimeout)]
@@ -278,10 +286,18 @@ class Controller:
             if handleable_poll_responses:
                 poll_ack_commands = [address_commands(device.device_address, PollAck()) for (device, _) in handleable_poll_responses]
 
+                ack_start = time.perf_counter()
                 self.interface.execute(poll_ack_commands)
+                ack_time = time.perf_counter()
 
                 for (device, poll_response) in handleable_poll_responses:
                     self._handle_poll_response(device, poll_response)
+
+                iteration_time = (ack_time - iteration_start) * 1000
+                poll_duration = (poll_execute_time - poll_execute_start) * 1000
+                ack_duration = (ack_time - ack_start) * 1000
+
+                self.logger.debug(f'Poll iteration {poll_iteration + 1}: total={iteration_time:.2f}ms, poll={poll_duration:.2f}ms, ack={ack_duration:.2f}ms, responses={len(handleable_poll_responses)}')
 
             # Handle lost devices.
             for (device, poll_response) in poll_responses:
@@ -290,6 +306,9 @@ class Controller:
 
             if not handleable_poll_responses:
                 break
+
+        total_poll_time = (time.perf_counter() - poll_start) * 1000
+        self.logger.debug(f'Total poll cycle took {total_poll_time:.2f}ms')
 
     def _poll_next_detached_device(self):
         if self.last_detached_poll_time is not None and (time.perf_counter() - self.last_detached_poll_time) < self.detached_poll_period:
@@ -364,7 +383,19 @@ class Controller:
         device_address = terminal.device_address
         scan_code = poll_response.scan_code
 
-        self.logger.debug(f'Keystroke detected at {keystroke_start_time:.6f}: Scan Code = {scan_code}')
+        # Track timing between keystrokes
+        current_time = keystroke_start_time
+        if self.last_keystroke_time is not None:
+            time_since_last_keystroke = (current_time - self.last_keystroke_time) * 1000
+            self.logger.info(f'Time since last keystroke: {time_since_last_keystroke:.2f}ms')
+        else:
+            time_since_last_keystroke = 0
+            self.logger.info('First keystroke detected')
+
+        self.last_keystroke_time = current_time
+        self.keystroke_count += 1
+
+        self.logger.debug(f'Keystroke #{self.keystroke_count} detected at {keystroke_start_time:.6f}: Scan Code = {scan_code}')
 
         (key, modifiers, modifiers_changed) = terminal.keyboard.get_key(scan_code)
         keyboard_processed_time = time.perf_counter()
@@ -402,7 +433,14 @@ class Controller:
                 render_time = time.perf_counter()
 
                 total_latency = (render_time - keystroke_start_time) * 1000
-                self.logger.info(f'Keystroke total latency: {total_latency:.2f}ms (keyboard: {(keyboard_processed_time - keystroke_start_time) * 1000:.2f}ms, session: {(session_handle_time - session_handle_start) * 1000:.2f}ms, render: {(render_time - render_start) * 1000:.2f}ms)')
+                self.logger.info(f'Keystroke #{self.keystroke_count} total latency: {total_latency:.2f}ms (keyboard: {(keyboard_processed_time - keystroke_start_time) * 1000:.2f}ms, session: {(session_handle_time - session_handle_start) * 1000:.2f}ms, render: {(render_time - render_start) * 1000:.2f}ms)')
+
+                # Calculate the "missing time" - time that can't be accounted for
+                if time_since_last_keystroke > 0:
+                    accounted_time = total_latency
+                    missing_time = time_since_last_keystroke - accounted_time
+                    if missing_time > 0:
+                        self.logger.warning(f'Missing time between keystrokes: {missing_time:.2f}ms (gap: {time_since_last_keystroke:.2f}ms, accounted: {accounted_time:.2f}ms)')
 
     def _calculate_poll_delay(self):
         if self.last_attached_poll_time is None:
