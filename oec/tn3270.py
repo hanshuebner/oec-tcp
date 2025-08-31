@@ -11,6 +11,7 @@ from tn3270.ebcdic import DUP, FM
 from .session import Session, SessionDisconnectedError
 from .display import encode_character, encode_string
 from .keyboard import Key, get_character_for_key
+import time
 
 AID_KEY_MAP = {
     Key.CLEAR: AID.CLEAR,
@@ -163,8 +164,21 @@ class TN3270Session(Session):
             self.operator_error = error
 
     def render(self):
+        render_start = time.perf_counter()
+
+        apply_start = time.perf_counter()
         self._apply()
+        apply_time = time.perf_counter()
+
+        flush_start = time.perf_counter()
         self._flush()
+        flush_time = time.perf_counter()
+
+        total_render_time = (flush_time - render_start) * 1000
+        apply_duration = (apply_time - apply_start) * 1000
+        flush_duration = (flush_time - flush_start) * 1000
+
+        self.logger.debug(f'Render timing: total={total_render_time:.2f}ms, apply={apply_duration:.2f}ms, flush={flush_duration:.2f}ms')
 
     def _reset_insert(self):
         if not self.keyboard_insert:

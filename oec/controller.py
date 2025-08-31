@@ -93,6 +93,8 @@ class Controller:
         self.running = False
 
     def _run_loop(self):
+        loop_start = time.perf_counter()
+
         poll_delay = self._calculate_poll_delay()
 
         # If POLLing is delayed, handle the host output, otherwise just sleep.
@@ -107,10 +109,23 @@ class Controller:
             time.sleep(poll_delay)
 
         # POLL devices.
+        poll_start = time.perf_counter()
         self._poll_attached_devices()
+        poll_time = time.perf_counter()
+
+        detached_poll_start = time.perf_counter()
         self._poll_next_detached_device()
+        detached_poll_time = time.perf_counter()
+
+        total_loop_time = (time.perf_counter() - loop_start) * 1000
+        poll_duration = (poll_time - poll_start) * 1000
+        detached_poll_duration = (detached_poll_time - detached_poll_start) * 1000
+
+        if self.logger.isEnabledFor(logging.DEBUG):
+            self.logger.debug(f'Run loop: total={total_loop_time:.2f}ms, attached_poll={poll_duration:.2f}ms, detached_poll={detached_poll_duration:.2f}ms')
 
     def _update_sessions(self, duration):
+        update_start = time.perf_counter()
         start_time = time.perf_counter()
 
         # Start any missing sessions.
@@ -148,6 +163,7 @@ class Controller:
         updated_sessions = set()
 
         is_first_iteration = True
+        host_processing_start = time.perf_counter()
 
         while duration > 0:
             start_time = time.perf_counter()
@@ -179,8 +195,19 @@ class Controller:
             duration -= (time.perf_counter() - start_time)
             is_first_iteration = False
 
+        host_processing_time = time.perf_counter()
+
+        render_start = time.perf_counter()
         for session in updated_sessions:
             session.render()
+        render_time = time.perf_counter()
+
+        total_update_time = (time.perf_counter() - update_start) * 1000
+        host_duration = (host_processing_time - host_processing_start) * 1000
+        render_duration = (render_time - render_start) * 1000
+
+        if self.logger.isEnabledFor(logging.DEBUG):
+            self.logger.debug(f'Session update: total={total_update_time:.2f}ms, host_processing={host_duration:.2f}ms, render={render_duration:.2f}ms, updated_sessions={len(updated_sessions)}')
 
     def _select_sessions(self, duration):
         # The Windows selector will raise an error if there are no handles registered while
@@ -333,14 +360,19 @@ class Controller:
             self._handle_keystroke_poll_response(device, poll_response)
 
     def _handle_keystroke_poll_response(self, terminal, poll_response):
+        keystroke_start_time = time.perf_counter()
         device_address = terminal.device_address
         scan_code = poll_response.scan_code
 
+        self.logger.debug(f'Keystroke detected at {keystroke_start_time:.6f}: Scan Code = {scan_code}')
+
         (key, modifiers, modifiers_changed) = terminal.keyboard.get_key(scan_code)
+        keyboard_processed_time = time.perf_counter()
 
         if self.logger.isEnabledFor(logging.DEBUG):
             self.logger.debug((f'Keystroke detected: Scan Code = {scan_code}, '
                                f'Key = {key}, Modifiers = {modifiers}'))
+            self.logger.debug(f'Keyboard processing took {(keyboard_processed_time - keystroke_start_time) * 1000:.2f}ms')
 
         # Update the status line if modifiers have changed.
         if modifiers_changed:
@@ -359,9 +391,18 @@ class Controller:
             (session_state, session) = self.sessions[device_address]
 
             if session_state == SessionState.ACTIVE:
+                session_handle_start = time.perf_counter()
                 session.handle_key(key, modifiers, scan_code)
+                session_handle_time = time.perf_counter()
 
+                self.logger.debug(f'Session key handling took {(session_handle_time - session_handle_start) * 1000:.2f}ms')
+
+                render_start = time.perf_counter()
                 session.render()
+                render_time = time.perf_counter()
+
+                total_latency = (render_time - keystroke_start_time) * 1000
+                self.logger.info(f'Keystroke total latency: {total_latency:.2f}ms (keyboard: {(keyboard_processed_time - keystroke_start_time) * 1000:.2f}ms, session: {(session_handle_time - session_handle_start) * 1000:.2f}ms, render: {(render_time - render_start) * 1000:.2f}ms)')
 
     def _calculate_poll_delay(self):
         if self.last_attached_poll_time is None:

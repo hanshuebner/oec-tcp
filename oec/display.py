@@ -10,6 +10,7 @@ from more_itertools import interleave
 from sortedcontainers import SortedSet
 from coax import ReadAddressCounterHi, ReadAddressCounterLo, LoadAddressCounterHi, \
                  LoadAddressCounterLo, WriteData, EABLoadMask, EABWriteAlternate, Data
+import time
 
 # Does not include the status line row.
 Dimensions = namedtuple('Dimensions', ['rows', 'columns'])
@@ -255,13 +256,22 @@ class BufferedDisplay(Display):
         return True
 
     def flush(self):
+        flush_start = time.perf_counter()
         dirty_ranges = self._get_dirty_ranges()
 
         if not dirty_ranges:
             return False
 
+        write_start = time.perf_counter()
         for (start_address, end_address) in dirty_ranges:
             self._write_range(start_address, end_address)
+        write_time = time.perf_counter()
+
+        total_flush_time = (write_time - flush_start) * 1000
+        write_duration = (write_time - write_start) * 1000
+
+        if self.logger.isEnabledFor(logging.DEBUG):
+            self.logger.debug(f'Display flush: total={total_flush_time:.2f}ms, write={write_duration:.2f}ms, ranges={len(dirty_ranges)}')
 
         return True
 
