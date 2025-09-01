@@ -109,6 +109,12 @@ def main():
         interface_spec = args.interface
 
     with interface_opener(interface_spec) as interface:
+        # For TCP interfaces, wait for a client connection before starting
+        if interface_opener == open_tcp_interface:
+            logger.info(f'Waiting for client connection on {interface_spec}...')
+            interface.wait_for_connection()  # Wait indefinitely for connection
+            logger.info('Client connected, starting controller...')
+
         controller = Controller(InterfaceWrapper(interface), create_device, create_session)
 
         def signal_handler(_number, _frame):
