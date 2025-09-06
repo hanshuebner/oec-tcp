@@ -96,72 +96,202 @@ class TN3270Session(Session):
         return self.emulator.stream.socket.fileno()
 
     def handle_host(self):
+        handle_host_start = time.perf_counter()
+
         try:
+            emulator_update_start = time.perf_counter()
             if not self.emulator.update(timeout=0):
+                emulator_update_time = time.perf_counter()
+                if self.logger.isEnabledFor(logging.DEBUG):
+                    emulator_update_duration = (emulator_update_time - emulator_update_start) * 1000
+                    self.logger.debug(f'Emulator update (no data): {emulator_update_duration:.2f}ms')
                 return False
+            emulator_update_time = time.perf_counter()
+
+            if self.logger.isEnabledFor(logging.DEBUG):
+                emulator_update_duration = (emulator_update_time - emulator_update_start) * 1000
+                self.logger.debug(f'Emulator update (data received): {emulator_update_duration:.2f}ms')
         except (EOFError, ConnectionResetError):
             self._disconnect_host()
-
             raise SessionDisconnectedError
 
         self.waiting_on_host = False
 
+        if self.logger.isEnabledFor(logging.DEBUG):
+            total_handle_host_time = (time.perf_counter() - handle_host_start) * 1000
+            self.logger.debug(f'Handle host total: {total_handle_host_time:.2f}ms')
+
         return True
 
     def handle_key(self, key, keyboard_modifiers, scan_code):
+        handle_key_start = time.perf_counter()
+
+        aid_lookup_start = time.perf_counter()
         aid = AID_KEY_MAP.get(key)
+        aid_lookup_time = time.perf_counter()
 
         try:
             if aid is not None:
+                reset_insert_start = time.perf_counter()
                 self._reset_insert()
+                reset_insert_time = time.perf_counter()
 
+                aid_send_start = time.perf_counter()
                 self.emulator.aid(aid)
+                aid_send_time = time.perf_counter()
 
                 self.waiting_on_host = True
+
+                if self.logger.isEnabledFor(logging.DEBUG):
+                    reset_insert_duration = (reset_insert_time - reset_insert_start) * 1000
+                    aid_send_duration = (aid_send_time - aid_send_start) * 1000
+                    self.logger.debug(f'AID key handling: reset_insert={reset_insert_duration:.2f}ms, aid_send={aid_send_duration:.2f}ms')
             #elif key == Key.RESET:
             elif key == Key.TAB:
+                tab_start = time.perf_counter()
                 self.emulator.tab()
+                tab_time = time.perf_counter()
+                if self.logger.isEnabledFor(logging.DEBUG):
+                    tab_duration = (tab_time - tab_start) * 1000
+                    self.logger.debug(f'TAB operation: {tab_duration:.2f}ms')
             elif key == Key.BACKTAB:
+                backtab_start = time.perf_counter()
                 self.emulator.tab(direction=-1)
+                backtab_time = time.perf_counter()
+                if self.logger.isEnabledFor(logging.DEBUG):
+                    backtab_duration = (backtab_time - backtab_start) * 1000
+                    self.logger.debug(f'BACKTAB operation: {backtab_duration:.2f}ms')
             elif key == Key.NEWLINE:
+                newline_start = time.perf_counter()
                 self.emulator.newline()
+                newline_time = time.perf_counter()
+                if self.logger.isEnabledFor(logging.DEBUG):
+                    newline_duration = (newline_time - newline_start) * 1000
+                    self.logger.debug(f'NEWLINE operation: {newline_duration:.2f}ms')
             elif key == Key.HOME:
+                home_start = time.perf_counter()
                 self.emulator.home()
+                home_time = time.perf_counter()
+                if self.logger.isEnabledFor(logging.DEBUG):
+                    home_duration = (home_time - home_start) * 1000
+                    self.logger.debug(f'HOME operation: {home_duration:.2f}ms')
             elif key == Key.UP:
+                up_start = time.perf_counter()
                 self.emulator.cursor_up()
+                up_time = time.perf_counter()
+                if self.logger.isEnabledFor(logging.DEBUG):
+                    up_duration = (up_time - up_start) * 1000
+                    self.logger.debug(f'UP operation: {up_duration:.2f}ms')
             elif key == Key.DOWN:
+                down_start = time.perf_counter()
                 self.emulator.cursor_down()
+                down_time = time.perf_counter()
+                if self.logger.isEnabledFor(logging.DEBUG):
+                    down_duration = (down_time - down_start) * 1000
+                    self.logger.debug(f'DOWN operation: {down_duration:.2f}ms')
             elif key == Key.LEFT:
+                left_start = time.perf_counter()
                 self.emulator.cursor_left()
+                left_time = time.perf_counter()
+                if self.logger.isEnabledFor(logging.DEBUG):
+                    left_duration = (left_time - left_start) * 1000
+                    self.logger.debug(f'LEFT operation: {left_duration:.2f}ms')
             elif key == Key.LEFT_2:
+                left2_start = time.perf_counter()
                 self.emulator.cursor_left(rate=2)
+                left2_time = time.perf_counter()
+                if self.logger.isEnabledFor(logging.DEBUG):
+                    left2_duration = (left2_time - left2_start) * 1000
+                    self.logger.debug(f'LEFT_2 operation: {left2_duration:.2f}ms')
             elif key == Key.RIGHT:
+                right_start = time.perf_counter()
                 self.emulator.cursor_right()
+                right_time = time.perf_counter()
+                if self.logger.isEnabledFor(logging.DEBUG):
+                    right_duration = (right_time - right_start) * 1000
+                    self.logger.debug(f'RIGHT operation: {right_duration:.2f}ms')
             elif key == Key.RIGHT_2:
+                right2_start = time.perf_counter()
                 self.emulator.cursor_right(rate=2)
+                right2_time = time.perf_counter()
+                if self.logger.isEnabledFor(logging.DEBUG):
+                    right2_duration = (right2_time - right2_start) * 1000
+                    self.logger.debug(f'RIGHT_2 operation: {right2_duration:.2f}ms')
             elif key == Key.BACKSPACE:
+                backspace_start = time.perf_counter()
                 self.emulator.backspace()
+                backspace_time = time.perf_counter()
+                if self.logger.isEnabledFor(logging.DEBUG):
+                    backspace_duration = (backspace_time - backspace_start) * 1000
+                    self.logger.debug(f'BACKSPACE operation: {backspace_duration:.2f}ms')
             elif key == Key.DELETE:
+                delete_start = time.perf_counter()
                 self.emulator.delete()
+                delete_time = time.perf_counter()
+                if self.logger.isEnabledFor(logging.DEBUG):
+                    delete_duration = (delete_time - delete_start) * 1000
+                    self.logger.debug(f'DELETE operation: {delete_duration:.2f}ms')
             elif key == Key.ERASE_EOF:
+                erase_eof_start = time.perf_counter()
                 self.emulator.erase_end_of_field()
+                erase_eof_time = time.perf_counter()
+                if self.logger.isEnabledFor(logging.DEBUG):
+                    erase_eof_duration = (erase_eof_time - erase_eof_start) * 1000
+                    self.logger.debug(f'ERASE_EOF operation: {erase_eof_duration:.2f}ms')
             elif key == Key.ERASE_INPUT:
+                erase_input_start = time.perf_counter()
                 self.emulator.erase_input()
+                erase_input_time = time.perf_counter()
+                if self.logger.isEnabledFor(logging.DEBUG):
+                    erase_input_duration = (erase_input_time - erase_input_start) * 1000
+                    self.logger.debug(f'ERASE_INPUT operation: {erase_input_duration:.2f}ms')
             elif key == Key.INSERT:
+                insert_start = time.perf_counter()
                 self._handle_insert_key()
+                insert_time = time.perf_counter()
+                if self.logger.isEnabledFor(logging.DEBUG):
+                    insert_duration = (insert_time - insert_start) * 1000
+                    self.logger.debug(f'INSERT operation: {insert_duration:.2f}ms')
             elif key == Key.DUP:
+                dup_start = time.perf_counter()
                 self.emulator.dup()
+                dup_time = time.perf_counter()
+                if self.logger.isEnabledFor(logging.DEBUG):
+                    dup_duration = (dup_time - dup_start) * 1000
+                    self.logger.debug(f'DUP operation: {dup_duration:.2f}ms')
             elif key == Key.FIELD_MARK:
+                field_mark_start = time.perf_counter()
                 self.emulator.field_mark()
+                field_mark_time = time.perf_counter()
+                if self.logger.isEnabledFor(logging.DEBUG):
+                    field_mark_duration = (field_mark_time - field_mark_start) * 1000
+                    self.logger.debug(f'FIELD_MARK operation: {field_mark_duration:.2f}ms')
             else:
+                character_lookup_start = time.perf_counter()
                 character = get_character_for_key(key)
+                character_lookup_time = time.perf_counter()
 
                 if character:
+                    encoding_start = time.perf_counter()
                     byte = character.encode(self.character_encoding)[0]
+                    encoding_time = time.perf_counter()
 
+                    input_start = time.perf_counter()
                     self.emulator.input(byte, self.keyboard_insert)
+                    input_time = time.perf_counter()
+
+                    if self.logger.isEnabledFor(logging.DEBUG):
+                        character_lookup_duration = (character_lookup_time - character_lookup_start) * 1000
+                        encoding_duration = (encoding_time - encoding_start) * 1000
+                        input_duration = (input_time - input_start) * 1000
+                        self.logger.debug(f'Character input: lookup={character_lookup_duration:.2f}ms, encoding={encoding_duration:.2f}ms, input={input_duration:.2f}ms')
         except OperatorError as error:
             self.operator_error = error
+
+        if self.logger.isEnabledFor(logging.DEBUG):
+            total_handle_key_time = (time.perf_counter() - handle_key_start) * 1000
+            aid_lookup_duration = (aid_lookup_time - aid_lookup_start) * 1000
+            self.logger.debug(f'Handle key total: {total_handle_key_time:.2f}ms, aid_lookup={aid_lookup_duration:.2f}ms')
 
     def render(self):
         render_start = time.perf_counter()
@@ -223,33 +353,64 @@ class TN3270Session(Session):
         self.telnet = None
 
     def _apply(self):
+        apply_start = time.perf_counter()
+
         has_eab = self.terminal.display.has_eab
 
+        cell_processing_start = time.perf_counter()
+        cells_processed = 0
         for address in self.emulator.dirty:
             cell = self.emulator.cells[address]
 
             (regen_byte, eab_byte) = _map_cell(cell, self.character_encoding, has_eab)
 
             self.terminal.display.buffered_write_byte(regen_byte, eab_byte, index=address)
+            cells_processed += 1
+        cell_processing_time = time.perf_counter()
 
+        dirty_clear_start = time.perf_counter()
         self.emulator.dirty.clear()
+        dirty_clear_time = time.perf_counter()
 
         # Update the message area.
+        message_area_start = time.perf_counter()
         self.message_area = self._format_message_area()
+        message_area_time = time.perf_counter()
+
+        if self.logger.isEnabledFor(logging.DEBUG):
+            total_apply_time = (message_area_time - apply_start) * 1000
+            cell_processing_duration = (cell_processing_time - cell_processing_start) * 1000
+            dirty_clear_duration = (dirty_clear_time - dirty_clear_start) * 1000
+            message_area_duration = (message_area_time - message_area_start) * 1000
+            self.logger.debug(f'Apply: total={total_apply_time:.2f}ms, cell_processing={cell_processing_duration:.2f}ms, cells={cells_processed}, dirty_clear={dirty_clear_duration:.2f}ms, message_area={message_area_duration:.2f}ms')
 
     def _flush(self):
+        flush_start = time.perf_counter()
+
+        display_flush_start = time.perf_counter()
         self.terminal.display.flush()
+        display_flush_time = time.perf_counter()
 
         # TODO: hmm we need a buffered status line...
+        status_line_start = time.perf_counter()
         if self.message_area != self.last_message_area:
             self.terminal.display.status_line.write(8, self.message_area)
-
             self.last_message_area = self.message_area
+        status_line_time = time.perf_counter()
 
+        cursor_move_start = time.perf_counter()
         self.terminal.display.move_cursor(index=self.emulator.cursor_address)
+        cursor_move_time = time.perf_counter()
 
         # TODO: This needs to be moved.
         self.operator_error = None
+
+        if self.logger.isEnabledFor(logging.DEBUG):
+            total_flush_time = (cursor_move_time - flush_start) * 1000
+            display_flush_duration = (display_flush_time - display_flush_start) * 1000
+            status_line_duration = (status_line_time - status_line_start) * 1000
+            cursor_move_duration = (cursor_move_time - cursor_move_start) * 1000
+            self.logger.debug(f'Flush: total={total_flush_time:.2f}ms, display_flush={display_flush_duration:.2f}ms, status_line={status_line_duration:.2f}ms, cursor_move={cursor_move_duration:.2f}ms')
 
     def _format_message_area(self):
         message_area = b''

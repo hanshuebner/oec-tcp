@@ -56,6 +56,9 @@ class Display:
         return self._load_address_counter(address, force_load)
 
     def write(self, regen_data, eab_data, address=None, index=None, row=None, column=None, restore_original_address=False):
+        write_start = time.perf_counter()
+
+        validation_start = time.perf_counter()
         if eab_data is not None:
             if not self.has_eab:
                 raise RuntimeError('No EAB feature')
@@ -71,7 +74,9 @@ class Display:
                     raise ValueError('Regen and EAB data length must be equal')
             else:
                 raise ValueError('Regen and EAB data must be provided in same form')
+        validation_time = time.perf_counter()
 
+        address_setup_start = time.perf_counter()
         if restore_original_address:
             original_address = self.address_counter if self.address_counter is not None else self._read_address_counter()
 
@@ -79,17 +84,24 @@ class Display:
 
         if address is not None:
             self._load_address_counter(address, force_load=False)
+        address_setup_time = time.perf_counter()
 
+        data_prep_start = time.perf_counter()
         if eab_data is not None:
             if isinstance(regen_data, tuple):
                 data = (bytes(interleave(regen_data[0], eab_data[0])), regen_data[1])
             else:
                 data = bytes(interleave(regen_data, eab_data))
+        data_prep_time = time.perf_counter()
 
+        terminal_write_start = time.perf_counter()
+        if eab_data is not None:
             self._eab_write_alternate(data)
         else:
             self._write_data(regen_data)
+        terminal_write_time = time.perf_counter()
 
+        address_update_start = time.perf_counter()
         if isinstance(regen_data, tuple):
             count = len(regen_data[0]) * regen_data[1]
         else:
@@ -99,6 +111,16 @@ class Display:
 
         if restore_original_address:
             self._load_address_counter(original_address, force_load=True)
+        address_update_time = time.perf_counter()
+
+        if self.logger.isEnabledFor(logging.DEBUG):
+            total_write_time = (address_update_time - write_start) * 1000
+            validation_duration = (validation_time - validation_start) * 1000
+            address_setup_duration = (address_setup_time - address_setup_start) * 1000
+            data_prep_duration = (data_prep_time - data_prep_start) * 1000
+            terminal_write_duration = (terminal_write_time - terminal_write_start) * 1000
+            address_update_duration = (address_update_time - address_update_start) * 1000
+            self.logger.debug(f'Display write: total={total_write_time:.2f}ms, validation={validation_duration:.2f}ms, address_setup={address_setup_duration:.2f}ms, data_prep={data_prep_duration:.2f}ms, terminal_write={terminal_write_duration:.2f}ms, address_update={address_update_duration:.2f}ms')
 
     @property
     def has_eab(self):
@@ -108,7 +130,13 @@ class Display:
         if not self.has_eab:
             raise RuntimeError('No EAB feature')
 
+        load_mask_start = time.perf_counter()
         self.terminal.execute(EABLoadMask(self.eab_address, mask))
+        load_mask_time = time.perf_counter()
+
+        if self.logger.isEnabledFor(logging.DEBUG):
+            load_mask_duration = (load_mask_time - load_mask_start) * 1000
+            self.logger.debug(f'Load EAB mask: {load_mask_duration:.2f}ms')
 
     def toggle_cursor_blink(self):
         self.terminal.control.cursor_blink = not self.terminal.control.cursor_blink
@@ -148,15 +176,23 @@ class Display:
         return address
 
     def _read_address_counter(self):
+        read_start = time.perf_counter()
         [hi, lo] = self.terminal.execute([ReadAddressCounterHi(), ReadAddressCounterLo()])
+        read_time = time.perf_counter()
 
         self.address_counter = (hi << 8) | lo
+
+        if self.logger.isEnabledFor(logging.DEBUG):
+            read_duration = (read_time - read_start) * 1000
+            self.logger.debug(f'Read address counter: {read_duration:.2f}ms')
 
         return self.address_counter
 
     def _load_address_counter(self, address, force_load):
         if address == self.address_counter and not force_load:
             return False
+
+        load_start = time.perf_counter()
 
         (hi, lo) = _split_address(address)
         (current_hi, current_lo) = _split_address(self.address_counter)
@@ -169,19 +205,38 @@ class Display:
         if lo != current_lo or force_load:
             commands.append(LoadAddressCounterLo(lo))
 
+        execute_start = time.perf_counter()
         self.terminal.execute(commands)
+        execute_time = time.perf_counter()
 
         self.address_counter = address
+
+        if self.logger.isEnabledFor(logging.DEBUG):
+            total_load_time = (execute_time - load_start) * 1000
+            execute_duration = (execute_time - execute_start) * 1000
+            self.logger.debug(f'Load address counter: total={total_load_time:.2f}ms, execute={execute_duration:.2f}ms, commands={len(commands)}')
 
         return True
 
     def _write_data(self, data):
+        write_start = time.perf_counter()
         self.terminal.execute_jumbo_write(data, WriteData, Data, -1)
+        write_time = time.perf_counter()
+
+        if self.logger.isEnabledFor(logging.DEBUG):
+            write_duration = (write_time - write_start) * 1000
+            self.logger.debug(f'Write data: {write_duration:.2f}ms, bytes={len(data) if isinstance(data, (bytes, bytearray)) else "tuple"}')
 
     def _eab_write_alternate(self, data):
         # The EAB_WRITE_ALTERNATE command data must be split so that the two bytes
         # do not get separated, otherwise the write will be incorrect.
+        eab_write_start = time.perf_counter()
         self.terminal.execute_jumbo_write(data, lambda chunk: EABWriteAlternate(self.eab_address, chunk), Data, -2)
+        eab_write_time = time.perf_counter()
+
+        if self.logger.isEnabledFor(logging.DEBUG):
+            eab_write_duration = (eab_write_time - eab_write_start) * 1000
+            self.logger.debug(f'EAB write alternate: {eab_write_duration:.2f}ms, bytes={len(data) if isinstance(data, (bytes, bytearray)) else "tuple"}')
 
 def _split_address(address):
     if address is None:
@@ -257,21 +312,29 @@ class BufferedDisplay(Display):
 
     def flush(self):
         flush_start = time.perf_counter()
+
+        get_ranges_start = time.perf_counter()
         dirty_ranges = self._get_dirty_ranges()
+        get_ranges_time = time.perf_counter()
 
         if not dirty_ranges:
             return False
 
         write_start = time.perf_counter()
+        total_range_write_time = 0
         for (start_address, end_address) in dirty_ranges:
+            range_write_start = time.perf_counter()
             self._write_range(start_address, end_address)
+            range_write_time = time.perf_counter()
+            total_range_write_time += (range_write_time - range_write_start) * 1000
         write_time = time.perf_counter()
 
         total_flush_time = (write_time - flush_start) * 1000
+        get_ranges_duration = (get_ranges_time - get_ranges_start) * 1000
         write_duration = (write_time - write_start) * 1000
 
         if self.logger.isEnabledFor(logging.DEBUG):
-            self.logger.debug(f'Display flush: total={total_flush_time:.2f}ms, write={write_duration:.2f}ms, ranges={len(dirty_ranges)}')
+            self.logger.debug(f'Display flush: total={total_flush_time:.2f}ms, get_ranges={get_ranges_duration:.2f}ms, write={write_duration:.2f}ms, range_writes={total_range_write_time:.2f}ms, ranges={len(dirty_ranges)}')
 
         return True
 
@@ -311,11 +374,23 @@ class BufferedDisplay(Display):
         if self.logger.isEnabledFor(logging.DEBUG):
             self.logger.debug(f'Writing range {start_address}-{end_address}')
 
+        range_start = time.perf_counter()
+
+        buffer_extract_start = time.perf_counter()
         regen_data = self.regen_buffer[start_address:end_address+1]
         eab_data = self.eab_buffer[start_address:end_address+1] if self.has_eab else None
+        buffer_extract_time = time.perf_counter()
 
         try:
+            write_call_start = time.perf_counter()
             self.write(regen_data, eab_data, address=start_address)
+            write_call_time = time.perf_counter()
+
+            if self.logger.isEnabledFor(logging.DEBUG):
+                range_total_time = (write_call_time - range_start) * 1000
+                buffer_extract_duration = (buffer_extract_time - buffer_extract_start) * 1000
+                write_call_duration = (write_call_time - write_call_start) * 1000
+                self.logger.debug(f'Range {start_address}-{end_address}: total={range_total_time:.2f}ms, buffer_extract={buffer_extract_duration:.2f}ms, write_call={write_call_duration:.2f}ms')
         except Exception as error:
             # TODO: This could leave the address_counter incorrect.
             self.logger.error(f'Write error: {error}', exc_info=error)

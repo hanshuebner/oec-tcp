@@ -129,10 +129,13 @@ class Controller:
         update_start = time.perf_counter()
 
         # Start session if device is attached but no session exists
+        session_start_check = time.perf_counter()
         if self.device and not self.session:
             self._start_session()
+        session_start_time = time.perf_counter()
 
         # Handle session state transitions
+        state_transition_start = time.perf_counter()
         if self.session_state == SessionState.STARTING and isinstance(self.session, futures.Future):
             if self.session.done():
                 session = self.session.result()
@@ -146,6 +149,7 @@ class Controller:
                 self.session = None
                 self.session_state = None
                 self.logger.info(f'Session terminated for device @ {format_device(self.interface)}')
+        state_transition_time = time.perf_counter()
 
         # Update active session
         updated_session = False
@@ -153,12 +157,17 @@ class Controller:
 
         if self.session_state == SessionState.ACTIVE and duration > 0:
             start_time = time.perf_counter()
+            select_start = time.perf_counter()
             sessions = set(self._select_sessions(duration))
+            select_time = time.perf_counter()
 
             if self.session in sessions:
                 try:
+                    handle_host_start = time.perf_counter()
                     if self.session.handle_host():
                         updated_session = True
+                    handle_host_time = time.perf_counter()
+                    self.logger.debug(f'Session handle_host: {(handle_host_time - handle_host_start) * 1000:.2f}ms')
                 except SessionDisconnectedError:
                     self._handle_session_disconnected()
 
@@ -174,9 +183,11 @@ class Controller:
         total_update_time = (time.perf_counter() - update_start) * 1000
         host_duration = (host_processing_time - host_processing_start) * 1000
         render_duration = (render_time - render_start) * 1000
+        session_start_duration = (session_start_time - session_start_check) * 1000
+        state_transition_duration = (state_transition_time - state_transition_start) * 1000
 
         if self.logger.isEnabledFor(logging.DEBUG):
-            self.logger.debug(f'Session update: total={total_update_time:.2f}ms, host_processing={host_duration:.2f}ms, render={render_duration:.2f}ms, updated={updated_session}')
+            self.logger.debug(f'Session update: total={total_update_time:.2f}ms, session_start={session_start_duration:.2f}ms, state_transition={state_transition_duration:.2f}ms, host_processing={host_duration:.2f}ms, render={render_duration:.2f}ms, updated={updated_session}')
 
     def _select_sessions(self, duration):
         # The Windows selector will raise an error if there are no handles registered while
@@ -233,10 +244,17 @@ class Controller:
         if not self.device:
             return
 
+        total_poll_execute_time = 0
+        total_ack_time = 0
+        total_response_handle_time = 0
+        iterations_with_response = 0
+
         for poll_iteration in range(self.poll_depth):
             iteration_start = time.perf_counter()
 
+            poll_command_start = time.perf_counter()
             poll_command = Poll(self.device.get_poll_action())
+            poll_command_time = time.perf_counter()
 
             poll_execute_start = time.perf_counter()
             poll_response = self.interface.execute(poll_command, receive_timeout_is_error=False)
@@ -248,13 +266,22 @@ class Controller:
                 self.interface.execute(PollAck())
                 ack_time = time.perf_counter()
 
+                response_handle_start = time.perf_counter()
                 self._handle_poll_response(poll_response)
+                response_handle_time = time.perf_counter()
 
-                iteration_time = (ack_time - iteration_start) * 1000
+                iteration_time = (response_handle_time - iteration_start) * 1000
+                poll_command_duration = (poll_command_time - poll_command_start) * 1000
                 poll_duration = (poll_execute_time - poll_execute_start) * 1000
                 ack_duration = (ack_time - ack_start) * 1000
+                response_handle_duration = (response_handle_time - response_handle_start) * 1000
 
-                self.logger.debug(f'Poll iteration {poll_iteration + 1}: total={iteration_time:.2f}ms, poll={poll_duration:.2f}ms, ack={ack_duration:.2f}ms, response=True')
+                total_poll_execute_time += poll_duration
+                total_ack_time += ack_duration
+                total_response_handle_time += response_handle_duration
+                iterations_with_response += 1
+
+                self.logger.debug(f'Poll iteration {poll_iteration + 1}: total={iteration_time:.2f}ms, command={poll_command_duration:.2f}ms, poll={poll_duration:.2f}ms, ack={ack_duration:.2f}ms, handle={response_handle_duration:.2f}ms, response=True')
             else:
                 # Handle lost device.
                 if isinstance(poll_response, ReceiveTimeout):
@@ -264,7 +291,7 @@ class Controller:
                     break
 
         total_poll_time = (time.perf_counter() - poll_start) * 1000
-        self.logger.debug(f'Total poll cycle took {total_poll_time:.2f}ms')
+        self.logger.debug(f'Total poll cycle: {total_poll_time:.2f}ms, iterations={iterations_with_response}, poll_execute={total_poll_execute_time:.2f}ms, ack={total_ack_time:.2f}ms, handle={total_response_handle_time:.2f}ms')
 
     def _poll_for_device(self):
         if self.last_detached_poll_time is not None and (time.perf_counter() - self.last_detached_poll_time) < self.detached_poll_period:
@@ -375,7 +402,11 @@ class Controller:
             render_time = time.perf_counter()
 
             total_latency = (render_time - keystroke_start_time) * 1000
-            self.logger.info(f'Keystroke #{self.keystroke_count} total latency: {total_latency:.2f}ms (keyboard: {(keyboard_processed_time - keystroke_start_time) * 1000:.2f}ms, session: {(session_handle_time - session_handle_start) * 1000:.2f}ms, render: {(render_time - render_start) * 1000:.2f}ms)')
+            keyboard_latency = (keyboard_processed_time - keystroke_start_time) * 1000
+            session_latency = (session_handle_time - session_handle_start) * 1000
+            render_latency = (render_time - render_start) * 1000
+
+            self.logger.info(f'Keystroke #{self.keystroke_count} total latency: {total_latency:.2f}ms (keyboard: {keyboard_latency:.2f}ms, session: {session_latency:.2f}ms, render: {render_latency:.2f}ms)')
 
             # Calculate the "missing time" - time that can't be accounted for
             if time_since_last_keystroke > 0:
