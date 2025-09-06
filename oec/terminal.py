@@ -19,8 +19,8 @@ MODEL_DIMENSIONS = {
 class Terminal(Device):
     """The terminal."""
 
-    def __init__(self, interface, device_address, terminal_id, extended_id, features, keymap):
-        super().__init__(interface, device_address)
+    def __init__(self, interface, terminal_id, extended_id, features, keymap):
+        super().__init__(interface)
 
         self.terminal_id = terminal_id
         self.extended_id = extended_id

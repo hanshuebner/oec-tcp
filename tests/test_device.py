@@ -8,43 +8,16 @@ from coax.protocol import TerminalId
 import context
 
 from oec.interface import InterfaceWrapper
-from oec.device import address_commands, format_address, get_ids, get_features, get_keyboard_description, _jumbo_write_split_data
+from oec.device import format_device, get_ids, get_features, get_keyboard_description, _jumbo_write_split_data
 
 from mock_interface import MockInterface
 
-class AddressCommandsTestCase(unittest.TestCase):
-    def test_single_command(self):
-        # Arrange
-        command = ReadAddressCounterHi()
-
-        # Act
-        result = address_commands(0b111000, command)
-
-        # Assert
-        self.assertEqual(result, (0b111000, command))
-
-    def test_multiple_commands(self):
-        # Arrange
-        commands = [ReadAddressCounterHi(), ReadAddressCounterLo()]
-
-        # Act
-        result = address_commands(0b111000, commands)
-
-        # Assert
-        self.assertEqual(result, [(0b111000, commands[0]), (0b111000, commands[1])])
-
-class FormatAddressTestCase(unittest.TestCase):
+class FormatDeviceTestCase(unittest.TestCase):
     def setUp(self):
         self.interface = MockInterface()
 
-    def test_no_port(self):
-        self.assertEqual(format_address(InterfaceWrapper(self.interface), None), '/dev/mock#0')
-
-    def test_known_multiplexer_port(self):
-        self.assertEqual(format_address(InterfaceWrapper(self.interface), 0b110000), '/dev/mock#3')
-
-    def test_unknown_multiplexer_port(self):
-        self.assertEqual(format_address(InterfaceWrapper(self.interface), 0b111111), '/dev/mock?111111')
+    def test_format_device(self):
+        self.assertEqual(format_device(InterfaceWrapper(self.interface)), '/dev/mock')
 
 class GetIdsTestCase(unittest.TestCase):
     def setUp(self):
@@ -62,23 +35,23 @@ class GetIdsTestCase(unittest.TestCase):
 
     def test_dft(self):
         # Arrange
-        self.interface.mock_responses = [(None, ReadTerminalId, None, TerminalId(0b00000001))]
+        self.interface.mock_responses = [(ReadTerminalId, None, TerminalId(0b00000001))]
 
         # Act
-        (terminal_id, extended_id) = get_ids(InterfaceWrapper(self.interface), None)
+        (terminal_id, extended_id) = get_ids(InterfaceWrapper(self.interface))
 
         # Assert
         self.assertEqual(terminal_id.type, TerminalType.DFT)
         self.assertIsNone(extended_id)
 
-        self.interface.assert_command_not_executed(None, ReadExtendedId)
+        self.interface.assert_command_not_executed(ReadExtendedId)
 
     def test_no_extended_id(self):
         # Arrange
-        self.interface.mock_responses = [(None, ReadTerminalId, None, TerminalId(0b11110100))]
+        self.interface.mock_responses = [(ReadTerminalId, None, TerminalId(0b11110100))]
 
         # Act
-        (terminal_id, extended_id) = get_ids(InterfaceWrapper(self.interface), None)
+        (terminal_id, extended_id) = get_ids(InterfaceWrapper(self.interface))
 
         # Assert
         self.assertEqual(terminal_id.type, TerminalType.CUT)
@@ -86,17 +59,17 @@ class GetIdsTestCase(unittest.TestCase):
         self.assertEqual(terminal_id.keyboard, 15)
         self.assertIsNone(extended_id)
 
-        self.interface.assert_command_executed(None, ReadExtendedId)
+        self.interface.assert_command_executed(ReadExtendedId)
 
     def test_extended_id(self):
         # Arrange
         self.interface.mock_responses = [
-            (None, ReadTerminalId, None, TerminalId(0b11110100)),
-            (None, ReadExtendedId, None, bytes.fromhex('01 02 03 04'))
+            (ReadTerminalId, None, TerminalId(0b11110100)),
+            (ReadExtendedId, None, bytes.fromhex('01 02 03 04'))
         ]
 
         # Act
-        (terminal_id, extended_id) = get_ids(InterfaceWrapper(self.interface), None)
+        (terminal_id, extended_id) = get_ids(InterfaceWrapper(self.interface))
 
         # Assert
         self.assertEqual(terminal_id.type, TerminalType.CUT)
@@ -104,17 +77,17 @@ class GetIdsTestCase(unittest.TestCase):
         self.assertEqual(terminal_id.keyboard, 15)
         self.assertEqual(extended_id, '01020304')
 
-        self.interface.assert_command_executed(None, LoadSecondaryControl, lambda command: command.control.big == False)
-        self.interface.assert_command_executed(None, LoadAddressCounterLo, lambda command: command.address == 0)
+        self.interface.assert_command_executed(LoadSecondaryControl, lambda command: command.control.big == False)
+        self.interface.assert_command_executed(LoadAddressCounterLo, lambda command: command.address == 0)
 
     def test_terminal_id_error(self):
         # Arrange
         self.interface.mock_responses = [
-            (None, ReadTerminalId, None, Mock(side_effect=ProtocolError))
+            (ReadTerminalId, None, Mock(side_effect=ProtocolError))
         ]
 
         # Act
-        (terminal_id, extended_id) = get_ids(InterfaceWrapper(self.interface), None)
+        (terminal_id, extended_id) = get_ids(InterfaceWrapper(self.interface))
 
         # Assert
         self.assertIsNone(terminal_id)
@@ -125,12 +98,12 @@ class GetIdsTestCase(unittest.TestCase):
     def test_extended_id_error(self):
         # Arrange
         self.interface.mock_responses = [
-            (None, ReadTerminalId, None, TerminalId(0b11110100)),
-            (None, ReadExtendedId, None, Mock(side_effect=ProtocolError))
+            (ReadTerminalId, None, TerminalId(0b11110100)),
+            (ReadExtendedId, None, Mock(side_effect=ProtocolError))
         ]
 
         # Act
-        (terminal_id, extended_id) = get_ids(InterfaceWrapper(self.interface), None)
+        (terminal_id, extended_id) = get_ids(InterfaceWrapper(self.interface))
 
         # Assert
         self.assertEqual(terminal_id.type, TerminalType.CUT)
@@ -146,17 +119,17 @@ class GetFeaturesTestCase(unittest.TestCase):
 
     def test_no_features(self):
         # Act
-        features = get_features(InterfaceWrapper(self.interface), None)
+        features = get_features(InterfaceWrapper(self.interface))
 
         # Assert
         self.assertEqual(features, { })
 
     def test_eab_feature(self):
         # Arrange
-        self.interface.mock_responses = [(None, ReadFeatureId, lambda command: command.feature_address == 7, Feature.EAB.value)]
+        self.interface.mock_responses = [(ReadFeatureId, lambda command: command.feature_address == 7, Feature.EAB.value)]
 
         # Act
-        features = get_features(InterfaceWrapper(self.interface), None)
+        features = get_features(InterfaceWrapper(self.interface))
 
         # Assert
         self.assertEqual(features, { Feature.EAB: 7 })

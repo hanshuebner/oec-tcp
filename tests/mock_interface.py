@@ -19,38 +19,45 @@ class MockInterface(Interface):
         self._execute = Mock(wraps=self._execute)
 
     def _execute(self, commands, timeout):
-        return [self._mock_get_response(device_address, command) for (device_address, command) in commands]
+        if isinstance(commands, list):
+            return [self._mock_get_response(command) for command in commands]
+        else:
+            return self._mock_get_response(commands)
 
     def reset_mock(self):
         self.reset.reset_mock()
         self._execute.reset_mock()
 
-    def assert_command_executed(self, device_address, command_type, predicate=None):
-        if not self._mock_get_execute_commands(device_address, command_type, predicate):
+    def assert_command_executed(self, command_type, predicate=None):
+        if not self._mock_get_execute_commands(command_type, predicate):
             raise AssertionError('Expected command to be executed')
 
-    def assert_command_not_executed(self, device_address, command_type, predicate=None):
-        if self._mock_get_execute_commands(device_address, command_type, predicate):
+    def assert_command_not_executed(self, command_type, predicate=None):
+        if self._mock_get_execute_commands(command_type, predicate):
             raise AssertionError('Expected command not to be executed')
 
-    def _mock_get_execute_commands(self, device_address, command_type, predicate):
+    def _mock_get_execute_commands(self, command_type, predicate):
         calls = self._execute.call_args_list
 
         commands = []
 
         for call in calls:
-            for command in call[0][0]:
-                (call_device_address, call_command) = command
-
-                if (device_address == ANY or call_device_address == device_address) and isinstance(call_command, command_type):
-                    if predicate is None or predicate(call_command):
-                        commands.append(command)
+            commands_list = call[0][0]
+            if isinstance(commands_list, list):
+                for command in commands_list:
+                    if isinstance(command, command_type):
+                        if predicate is None or predicate(command):
+                            commands.append(command)
+            else:
+                if isinstance(commands_list, command_type):
+                    if predicate is None or predicate(commands_list):
+                        commands.append(commands_list)
 
         return commands
 
-    def _mock_get_response(self, device_address, command):
-        for (mock_device_address, mock_command_type, mock_predicate, mock_response) in self.mock_responses:
-            if mock_device_address == device_address and isinstance(command, mock_command_type):
+    def _mock_get_response(self, command):
+        for (mock_command_type, mock_predicate, mock_response) in self.mock_responses:
+            if isinstance(command, mock_command_type):
                 if mock_predicate is None or mock_predicate(command):
                     if callable(mock_response):
                         try:

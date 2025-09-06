@@ -14,13 +14,6 @@ from .device import get_ids, get_features, get_keyboard_description, Unsupported
 from .terminal import Terminal
 from .tn3270 import TN3270Session
 
-# VT100 emulation is not supported on Windows.
-IS_VT100_AVAILABLE = False
-
-if os.name == 'posix':
-    from .vt100 import VT100Session
-
-    IS_VT100_AVAILABLE = True
 
 from .keymap_3278_typewriter import KEYMAP as KEYMAP_3278_TYPEWRITER
 from .keymap_ibm_typewriter import KEYMAP as KEYMAP_IBM_TYPEWRITER
@@ -42,9 +35,9 @@ def _get_keymap(_args, keyboard_description):
 
     return KEYMAP_3278_TYPEWRITER
 
-def _create_device(args, interface, device_address, _poll_response):
+def _create_device(args, interface, _poll_response):
     # Read the terminal identifiers.
-    (terminal_id, extended_id) = get_ids(interface, device_address)
+    (terminal_id, extended_id) = get_ids(interface)
 
     logger.info(f'Terminal ID = {terminal_id}')
 
@@ -61,7 +54,7 @@ def _create_device(args, interface, device_address, _poll_response):
     logger.info(f'Keyboard = {keyboard_description}')
 
     # Read the terminal features.
-    features = get_features(interface, device_address)
+    features = get_features(interface)
 
     logger.info(f'Features = {features}')
 
@@ -71,27 +64,18 @@ def _create_device(args, interface, device_address, _poll_response):
     logger.info(f'Keymap = {keymap.name}')
 
     # Create the terminal.
-    terminal = Terminal(interface, device_address, terminal_id, extended_id, features, keymap)
+    terminal = Terminal(interface, terminal_id, extended_id, features, keymap)
 
     return terminal
 
 def _create_session(args, device):
-    if args.emulator == 'tn3270':
-        return TN3270Session(device, args.host, args.port, args.device_names, args.character_encoding, args.tn3270e_profile)
-
-    if args.emulator == 'vt100' and IS_VT100_AVAILABLE:
-        host_command = [args.command, *args.command_args]
-
-        # pylint: disable-next=possibly-used-before-assignment
-        return VT100Session(device, host_command)
-
-    raise ValueError('Unsupported emulator')
+    return TN3270Session(device, args.host, args.port, args.device_names, args.character_encoding, args.tn3270e_profile)
 
 def main():
-    args = parse_args(sys.argv[1:], IS_VT100_AVAILABLE)
+    args = parse_args(sys.argv[1:])
 
-    def create_device(interface, device_address, poll_response):
-        return _create_device(args, interface, device_address, poll_response)
+    def create_device(interface, poll_response):
+        return _create_device(args, interface, poll_response)
 
     def create_session(device):
         return _create_session(args, device)

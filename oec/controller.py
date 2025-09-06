@@ -9,11 +9,10 @@ import logging
 import selectors
 from concurrent import futures
 from itertools import groupby
-from coax import InterfaceFeature, Poll, PollAck, KeystrokePollResponse, \
+from coax import Poll, PollAck, KeystrokePollResponse, \
                  ReceiveTimeout, ReceiveError, ProtocolError
-from coax.multiplexer import PORT_MAP_3299
 
-from .device import address_commands, format_address, UnsupportedDeviceError
+from .device import format_device, UnsupportedDeviceError
 from .keyboard import Key
 from .session import SessionDisconnectedError
 
@@ -36,10 +35,9 @@ class Controller:
         self.create_device = create_device
         self.create_session = create_session
 
-        self.devices = { }
-        self.detached_device_poll_queue = []
-
-        self.sessions = { }
+        self.device = None
+        self.session = None
+        self.session_state = None
         self.session_selector = None
         self.session_executor = None
 
@@ -78,17 +76,16 @@ class Controller:
 
         self.session_executor = None
 
-        for session in [session for (state, session) in self.sessions.values() if state == SessionState.ACTIVE]:
-            self._terminate_session(session, blocking=True)
+        if self.session_state == SessionState.ACTIVE:
+            self._terminate_session(blocking=True)
 
         self.session_selector.close()
 
         self.session_selector = None
 
-        self.sessions.clear()
-
-        self.devices.clear()
-        self.detached_device_poll_queue.clear()
+        self.session = None
+        self.session_state = None
+        self.device = None
 
         self.logger.info('Controller stopped')
 
@@ -112,13 +109,13 @@ class Controller:
         if poll_delay > 0:
             time.sleep(poll_delay)
 
-        # POLL devices.
+        # POLL device.
         poll_start = time.perf_counter()
-        self._poll_attached_devices()
+        self._poll_device()
         poll_time = time.perf_counter()
 
         detached_poll_start = time.perf_counter()
-        self._poll_next_detached_device()
+        self._poll_for_device()
         detached_poll_time = time.perf_counter()
 
         total_loop_time = (time.perf_counter() - loop_start) * 1000
@@ -130,80 +127,48 @@ class Controller:
 
     def _update_sessions(self, duration):
         update_start = time.perf_counter()
-        start_time = time.perf_counter()
 
-        # Start any missing sessions.
-        for device_address in self.devices.keys() - self.sessions.keys():
-            self._start_session(self.devices[device_address])
+        # Start session if device is attached but no session exists
+        if self.device and not self.session:
+            self._start_session()
 
-        sessions = { state: [(device_address, session) for (device_address, (_, session)) in group] for (state, group) in groupby(self.sessions.items(), lambda item: item[1][0]) }
-
-        # Handle started sessions.
-        started_sessions = []
-
-        for (device_address, future) in sessions.get(SessionState.STARTING, []):
-            if future.done():
-                session = future.result()
-
-                self.sessions[device_address] = (SessionState.ACTIVE, session)
-
+        # Handle session state transitions
+        if self.session_state == SessionState.STARTING and isinstance(self.session, futures.Future):
+            if self.session.done():
+                session = self.session.result()
+                self.session = session
+                self.session_state = SessionState.ACTIVE
                 self.session_selector.register(session, selectors.EVENT_READ)
+                self.logger.info(f'Session started for device @ {format_device(self.interface)}')
 
-                started_sessions.append(session)
+        elif self.session_state == SessionState.TERMINATING and isinstance(self.session, futures.Future):
+            if self.session.done():
+                self.session = None
+                self.session_state = None
+                self.logger.info(f'Session terminated for device @ {format_device(self.interface)}')
 
-                self.logger.info(f'Session started for device @ {format_address(self.interface, device_address)}')
-
-        # Handle terminated sessions.
-        for (device_address, future) in sessions.get(SessionState.TERMINATING, []):
-            if future.done():
-                del self.sessions[device_address]
-
-                self.logger.info(f'Session terminated for device @ {format_address(self.interface, device_address)}')
-
-        # Update the duration based on the time taken handling futures.
-        duration -= (time.perf_counter() - start_time)
-
-        # Update active sessions.
-        updated_sessions = set()
-
-        is_first_iteration = True
+        # Update active session
+        updated_session = False
         host_processing_start = time.perf_counter()
 
-        while duration > 0:
+        if self.session_state == SessionState.ACTIVE and duration > 0:
             start_time = time.perf_counter()
-
             sessions = set(self._select_sessions(duration))
 
-            # Handle host output from started sessions immediately as the telnet client
-            # buffer may contain commands that were buffered during negotiation. If we do
-            # not handle them here, we will have to wait for further commands to trigger
-            # the read select event.
-            #
-            # This ensures that messages such as "connection rejected, no available device"
-            # are shown on the terminal.
-            if is_first_iteration:
-                sessions.update(started_sessions)
-
-            if not sessions:
-                break
-
-            for session in sessions:
+            if self.session in sessions:
                 try:
-                    if session.handle_host():
-                        updated_sessions.add(session)
+                    if self.session.handle_host():
+                        updated_session = True
                 except SessionDisconnectedError:
-                    updated_sessions.discard(session)
-
-                    self._handle_session_disconnected(session)
+                    self._handle_session_disconnected()
 
             duration -= (time.perf_counter() - start_time)
-            is_first_iteration = False
 
         host_processing_time = time.perf_counter()
 
         render_start = time.perf_counter()
-        for session in updated_sessions:
-            session.render()
+        if updated_session:
+            self.session.render()
         render_time = time.perf_counter()
 
         total_update_time = (time.perf_counter() - update_start) * 1000
@@ -211,7 +176,7 @@ class Controller:
         render_duration = (render_time - render_start) * 1000
 
         if self.logger.isEnabledFor(logging.DEBUG):
-            self.logger.debug(f'Session update: total={total_update_time:.2f}ms, host_processing={host_duration:.2f}ms, render={render_duration:.2f}ms, updated_sessions={len(updated_sessions)}')
+            self.logger.debug(f'Session update: total={total_update_time:.2f}ms, host_processing={host_duration:.2f}ms, render={render_duration:.2f}ms, updated={updated_session}')
 
     def _select_sessions(self, duration):
         # The Windows selector will raise an error if there are no handles registered while
@@ -223,13 +188,11 @@ class Controller:
 
         return [key.fileobj for (key, _) in selected]
 
-    def _start_session(self, device):
-        device_address = device.device_address
-
-        self.logger.info(f'Starting session for device @ {format_address(self.interface, device_address)}')
+    def _start_session(self):
+        self.logger.info(f'Starting session for device @ {format_device(self.interface)}')
 
         def start_session():
-            session = self.create_session(device)
+            session = self.create_session(self.device)
 
             session.start()
 
@@ -237,150 +200,132 @@ class Controller:
 
         future = self.session_executor.submit(start_session)
 
-        self.sessions[device_address] = (SessionState.STARTING, future)
+        self.session = future
+        self.session_state = SessionState.STARTING
 
-    def _terminate_session(self, session, blocking=False):
-        device_address = session.terminal.device_address
+    def _terminate_session(self, blocking=False):
+        self.logger.info(f'Terminating session for device @ {format_device(self.interface)}')
 
-        self.logger.info(f'Terminating session for device @ {format_address(self.interface, device_address)}')
-
-        self.session_selector.unregister(session)
+        if self.session_state == SessionState.ACTIVE:
+            self.session_selector.unregister(self.session)
 
         def terminate_session():
-            session.terminate()
+            self.session.terminate()
 
         if blocking:
             terminate_session()
-
-            del self.sessions[device_address]
+            self.session = None
+            self.session_state = None
         else:
             future = self.session_executor.submit(terminate_session)
+            self.session = future
+            self.session_state = SessionState.TERMINATING
 
-            self.sessions[device_address] = (SessionState.TERMINATING, future)
-
-    def _handle_session_disconnected(self, session):
+    def _handle_session_disconnected(self):
         self.logger.info('Session disconnected')
 
-        self._terminate_session(session)
+        self._terminate_session()
 
-    def _poll_attached_devices(self):
+    def _poll_device(self):
         poll_start = time.perf_counter()
         self.last_attached_poll_time = time.perf_counter()
 
+        if not self.device:
+            return
+
         for poll_iteration in range(self.poll_depth):
             iteration_start = time.perf_counter()
-            devices = self.devices.values()
 
-            if not devices:
-                break
-
-            poll_commands = [address_commands(device.device_address, Poll(device.get_poll_action())) for device in devices]
+            poll_command = Poll(self.device.get_poll_action())
 
             poll_execute_start = time.perf_counter()
-            poll_responses = list(zip(devices, self.interface.execute(poll_commands, receive_timeout_is_error=False)))
+            poll_response = self.interface.execute(poll_command, receive_timeout_is_error=False)
             poll_execute_time = time.perf_counter()
 
-            # Handle POLL responses.
-            handleable_poll_responses = [pair for pair in poll_responses if pair[1] is not None and not isinstance(pair[1], ReceiveTimeout)]
-
-            if handleable_poll_responses:
-                poll_ack_commands = [address_commands(device.device_address, PollAck()) for (device, _) in handleable_poll_responses]
-
+            # Handle POLL response.
+            if poll_response is not None and not isinstance(poll_response, ReceiveTimeout):
                 ack_start = time.perf_counter()
-                self.interface.execute(poll_ack_commands)
+                self.interface.execute(PollAck())
                 ack_time = time.perf_counter()
 
-                for (device, poll_response) in handleable_poll_responses:
-                    self._handle_poll_response(device, poll_response)
+                self._handle_poll_response(poll_response)
 
                 iteration_time = (ack_time - iteration_start) * 1000
                 poll_duration = (poll_execute_time - poll_execute_start) * 1000
                 ack_duration = (ack_time - ack_start) * 1000
 
-                self.logger.debug(f'Poll iteration {poll_iteration + 1}: total={iteration_time:.2f}ms, poll={poll_duration:.2f}ms, ack={ack_duration:.2f}ms, responses={len(handleable_poll_responses)}')
-
-            # Handle lost devices.
-            for (device, poll_response) in poll_responses:
+                self.logger.debug(f'Poll iteration {poll_iteration + 1}: total={iteration_time:.2f}ms, poll={poll_duration:.2f}ms, ack={ack_duration:.2f}ms, response=True')
+            else:
+                # Handle lost device.
                 if isinstance(poll_response, ReceiveTimeout):
-                    self._handle_device_lost(device)
+                    self._handle_device_lost()
 
-            if not handleable_poll_responses:
-                break
+                if poll_response is None or isinstance(poll_response, ReceiveTimeout):
+                    break
 
         total_poll_time = (time.perf_counter() - poll_start) * 1000
         self.logger.debug(f'Total poll cycle took {total_poll_time:.2f}ms')
 
-    def _poll_next_detached_device(self):
+    def _poll_for_device(self):
         if self.last_detached_poll_time is not None and (time.perf_counter() - self.last_detached_poll_time) < self.detached_poll_period:
             return
 
         self.last_detached_poll_time = time.perf_counter()
 
-        if not self.detached_device_poll_queue:
-            self.detached_device_poll_queue = list(self._get_detached_device_addresses())
+        if self.device:
+            return  # Device already attached
 
         try:
-            device_address = self.detached_device_poll_queue.pop(0)
-        except IndexError:
-            return
-
-        try:
-            poll_response = self.interface.execute(address_commands(device_address, Poll()))
+            poll_response = self.interface.execute(Poll())
         except ReceiveTimeout:
             return
         except ReceiveError as error:
-            self.logger.warning(f'POLL detached device @ {format_address(self.interface, device_address)} receive error: {error}')
+            self.logger.warning(f'POLL for device @ {format_device(self.interface)} receive error: {error}')
             return
         except ProtocolError as error:
-            self.logger.warning(f'POLL detached device @ {format_address(self.interface, device_address)} protocol error: {error}')
+            self.logger.warning(f'POLL for device @ {format_device(self.interface)} protocol error: {error}')
             return
 
         if poll_response:
             try:
-                self.interface.execute(address_commands(device_address, PollAck()))
+                self.interface.execute(PollAck())
             except ReceiveTimeout:
-                self.logger.warning(f'POLL detached device @ {format_address(self.interface, device_address)} PollAck timeout')
+                self.logger.warning(f'POLL for device @ {format_device(self.interface)} PollAck timeout')
                 return
 
-        self._handle_device_found(device_address, poll_response)
+        self._handle_device_found(poll_response)
 
-    def _handle_device_found(self, device_address, poll_response):
-        self.logger.info(f'Found device @ {format_address(self.interface, device_address)}')
+    def _handle_device_found(self, poll_response):
+        self.logger.info(f'Found device @ {format_device(self.interface)}')
 
         try:
-            device = self.create_device(self.interface, device_address, poll_response)
+            device = self.create_device(self.interface, poll_response)
         except UnsupportedDeviceError as error:
-            self.logger.error(f'Unsupported device @ {format_address(self.interface, device_address)}: {error}')
+            self.logger.error(f'Unsupported device @ {format_device(self.interface)}: {error}')
             return
 
         device.setup()
 
-        self.devices[device_address] = device
+        self.device = device
 
-        self.logger.info(f'Attached device @ {format_address(self.interface, device_address)}')
+        self.logger.info(f'Attached device @ {format_device(self.interface)}')
 
-    def _handle_device_lost(self, device):
-        device_address = device.device_address
+    def _handle_device_lost(self):
+        self.logger.info(f'Lost device @ {format_device(self.interface)}')
 
-        self.logger.info(f'Lost device @ {format_address(self.interface, device_address)}')
+        if self.session_state == SessionState.ACTIVE:
+            self._terminate_session()
 
-        if device_address in self.sessions:
-            (session_state, session) = self.sessions[device_address]
+        self.device = None
 
-            if session_state == SessionState.ACTIVE:
-                self._terminate_session(session)
+        self.logger.info(f'Detached device @ {format_device(self.interface)}')
 
-        del self.devices[device_address]
-
-        self.logger.info(f'Detached device @ {format_address(self.interface, device_address)}')
-
-    def _handle_poll_response(self, device, poll_response):
+    def _handle_poll_response(self, poll_response):
         if isinstance(poll_response, KeystrokePollResponse):
-            self._handle_keystroke_poll_response(device, poll_response)
+            self._handle_keystroke_poll_response(poll_response)
 
-    def _handle_keystroke_poll_response(self, terminal, poll_response):
+    def _handle_keystroke_poll_response(self, poll_response):
         keystroke_start_time = time.perf_counter()
-        device_address = terminal.device_address
         scan_code = poll_response.scan_code
 
         # Track timing between keystrokes
@@ -397,7 +342,7 @@ class Controller:
 
         self.logger.debug(f'Keystroke #{self.keystroke_count} detected at {keystroke_start_time:.6f}: Scan Code = {scan_code}')
 
-        (key, modifiers, modifiers_changed) = terminal.keyboard.get_key(scan_code)
+        (key, modifiers, modifiers_changed) = self.device.keyboard.get_key(scan_code)
         keyboard_processed_time = time.perf_counter()
 
         if self.logger.isEnabledFor(logging.DEBUG):
@@ -407,40 +352,37 @@ class Controller:
 
         # Update the status line if modifiers have changed.
         if modifiers_changed:
-            terminal.display.status_line.write_keyboard_modifiers(modifiers)
+            self.device.display.status_line.write_keyboard_modifiers(modifiers)
 
         if not key:
             return
 
         if key == Key.CURSOR_BLINK:
-            terminal.display.toggle_cursor_blink()
+            self.device.display.toggle_cursor_blink()
         elif key == Key.ALT_CURSOR:
-            terminal.display.toggle_cursor_reverse()
+            self.device.display.toggle_cursor_reverse()
         elif key == Key.CLICKER:
-            terminal.keyboard.toggle_clicker()
-        elif device_address in self.sessions:
-            (session_state, session) = self.sessions[device_address]
+            self.device.keyboard.toggle_clicker()
+        elif self.session_state == SessionState.ACTIVE:
+            session_handle_start = time.perf_counter()
+            self.session.handle_key(key, modifiers, scan_code)
+            session_handle_time = time.perf_counter()
 
-            if session_state == SessionState.ACTIVE:
-                session_handle_start = time.perf_counter()
-                session.handle_key(key, modifiers, scan_code)
-                session_handle_time = time.perf_counter()
+            self.logger.debug(f'Session key handling took {(session_handle_time - session_handle_start) * 1000:.2f}ms')
 
-                self.logger.debug(f'Session key handling took {(session_handle_time - session_handle_start) * 1000:.2f}ms')
+            render_start = time.perf_counter()
+            self.session.render()
+            render_time = time.perf_counter()
 
-                render_start = time.perf_counter()
-                session.render()
-                render_time = time.perf_counter()
+            total_latency = (render_time - keystroke_start_time) * 1000
+            self.logger.info(f'Keystroke #{self.keystroke_count} total latency: {total_latency:.2f}ms (keyboard: {(keyboard_processed_time - keystroke_start_time) * 1000:.2f}ms, session: {(session_handle_time - session_handle_start) * 1000:.2f}ms, render: {(render_time - render_start) * 1000:.2f}ms)')
 
-                total_latency = (render_time - keystroke_start_time) * 1000
-                self.logger.info(f'Keystroke #{self.keystroke_count} total latency: {total_latency:.2f}ms (keyboard: {(keyboard_processed_time - keystroke_start_time) * 1000:.2f}ms, session: {(session_handle_time - session_handle_start) * 1000:.2f}ms, render: {(render_time - render_start) * 1000:.2f}ms)')
-
-                # Calculate the "missing time" - time that can't be accounted for
-                if time_since_last_keystroke > 0:
-                    accounted_time = total_latency
-                    missing_time = time_since_last_keystroke - accounted_time
-                    if missing_time > 0:
-                        self.logger.warning(f'Missing time between keystrokes: {missing_time:.2f}ms (gap: {time_since_last_keystroke:.2f}ms, accounted: {accounted_time:.2f}ms)')
+            # Calculate the "missing time" - time that can't be accounted for
+            if time_since_last_keystroke > 0:
+                accounted_time = total_latency
+                missing_time = time_since_last_keystroke - accounted_time
+                if missing_time > 0:
+                    self.logger.warning(f'Missing time between keystrokes: {missing_time:.2f}ms (gap: {time_since_last_keystroke:.2f}ms, accounted: {accounted_time:.2f}ms)')
 
     def _calculate_poll_delay(self):
         if self.last_attached_poll_time is None:
@@ -448,20 +390,3 @@ class Controller:
 
         return max((self.last_attached_poll_time + self.attached_poll_period) - time.perf_counter(), 0)
 
-    def _get_detached_device_addresses(self):
-        attached_addresses = set(self.devices.keys())
-
-        # The 3299 is transparent, but if there is at least one device attached to a 3299
-        # port then we can assume there is a 3299 attached and if there is one device
-        # direct attached then we can assume there is not a 3299 attached.
-        is_3299_attached = any(attached_addresses.difference([None]))
-        is_3299_not_attached = (None in attached_addresses)
-
-        if is_3299_not_attached or InterfaceFeature.PROTOCOL_3299 not in self.interface.features:
-            addresses = [None]
-        elif is_3299_attached:
-            addresses = PORT_MAP_3299
-        else:
-            addresses = [None, *PORT_MAP_3299]
-
-        return filter(lambda address: address not in attached_addresses, addresses)

@@ -9,42 +9,27 @@ import logging
 
 logger = logging.getLogger('oec.args')
 
-def parse_args(args, is_vt100_available):
+def parse_args(args):
     parser = argparse.ArgumentParser(description='IBM 3270 terminal controller')
 
     parser.add_argument('interface', help='serial port name or interface URL')
+    parser.add_argument('host', metavar='[lu[,lu...]@]host[:port]',
+                        help='host and optional port and LUs')
+    parser.add_argument('port', nargs='?', type=int, help=argparse.SUPPRESS)
 
-    subparsers = parser.add_subparsers(dest='emulator', required=True,
-                                       description='emulator')
+    parser.add_argument('--codepage', metavar='encoding', default='ibm037',
+                        dest='character_encoding', type=get_character_encoding,
+                        help='host EBCDIC code page')
 
-    tn3270_parser = subparsers.add_parser('tn3270', description='TN3270 emulator',
-                                          help='TN3270 emulator')
+    parser.add_argument('--tn3270e', choices=['off', 'basic', 'default'],
+                        metavar='profile', default='default',
+                        dest='tn3270e_profile',
+                        help='TN3270E profile: off, basic, default')
 
-    tn3270_parser.add_argument('host', metavar='[lu[,lu...]@]host[:port]',
-                               help='host and optional port and LUs')
-    tn3270_parser.add_argument('port', nargs='?', type=int, help=argparse.SUPPRESS)
-
-    tn3270_parser.add_argument('--codepage', metavar='encoding', default='ibm037',
-                               dest='character_encoding', type=get_character_encoding,
-                               help='host EBCDIC code page')
-
-    tn3270_parser.add_argument('--tn3270e', choices=['off', 'basic', 'default'],
-                               metavar='profile', default='default',
-                               dest='tn3270e_profile',
-                               help='TN3270E profile: off, basic, default')
-
-    if is_vt100_available:
-        vt100_parser = subparsers.add_parser('vt100', description='VT100 emulator',
-                                             help='VT100 emulator')
-
-        vt100_parser.add_argument('command', help='host process')
-        vt100_parser.add_argument('command_args', nargs=argparse.REMAINDER,
-                                  help='host process arguments')
 
     args = parser.parse_args(args)
 
-    if args.emulator == 'tn3270':
-        (args.host, args.port, args.device_names) = parse_tn3270_host_args(args, parser)
+    (args.host, args.port, args.device_names) = parse_tn3270_host_args(args, parser)
 
     return args
 

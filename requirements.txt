@@ -1,8 +1,6 @@
 more-itertools==8.13.0
-ptyprocess==0.7.0
 pycoax @ git+https://github.com/hanshuebner/coax@interface3#subdirectory=pycoax
 pyserial==3.5
-pyte==0.8.1
 pytn3270 @ git+https://github.com/hanshuebner/pytn3270
 sliplib==0.6.2
 sortedcontainers==2.4.0

@@ -19,15 +19,13 @@ _[Building an IBM 3270 terminal controller](https://ajk.me/building-an-ibm-3270-
 ## Features
 
 It is a work in progress and is far from providing all the features you might
-expect from a later model 3174, but it does provide basic TN3270 and VT100
-emulation.
+expect from a later model 3174, but it does provide basic TN3270 emulation.
 
   - [x] TN3270
       - [x] Extended Data Stream
       - [x] Basic TN3270E
       - [x] Device name (_LU_) negotiation
       - [ ] SSL/TLS
-  - [x] VT100
   - [ ] Connection menu
   - [ ] MLT (Multiple Logical Terminals)
   - [x] Up to 8 terminals connected via IBM 3299 multiplexer<sup>1</sup>
@@ -71,16 +69,9 @@ pip install -r requirements.txt
 Assuming your interface is connected to `/dev/ttyACM0` and you want to connect to a TN3270 host named `mainframe`:
 
 ```
-python -m oec /dev/ttyACM0 tn3270 mainframe
+python -m oec /dev/ttyACM0 mainframe
 ```
 
-If you want to use the VT100 emulator and run `/bin/sh` as the host process:
-
-```
-python -m oec /dev/ttyACM0 vt100 /bin/sh -l
-```
-
-VT100 emulation is not supported on Windows. It may work with Python on Cygwin, but I've not tested it.
 
 ## See Also
 
