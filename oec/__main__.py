@@ -3,9 +3,8 @@ import sys
 import os
 import signal
 import logging
-from socket import socket
 
-from coax import open_serial_interface, open_http_interface, open_tcp_interface, TerminalType
+from coax import open_tcp_interface, TerminalType
 
 from .args import parse_args
 from .interface import InterfaceWrapper
@@ -82,15 +81,11 @@ def main():
 
     logger.info('Starting controller...')
 
-    if re.match('^https?://', args.interface):
-        interface_opener = open_http_interface
-        interface_spec = args.interface
-    elif re.match('^tcp://.*(|:\d+)$', args.interface):
-        interface_opener = open_tcp_interface
-        interface_spec = re.sub('^tcp://', '', args.interface)
-    else:
-        interface_opener = open_serial_interface
-        interface_spec = args.interface
+    if not re.match(r'^tcp://.*(|:\d+)$', args.interface):
+        raise ValueError(f'Only TCP interfaces are supported. Expected format: tcp://host:port, got: {args.interface}')
+
+    interface_opener = open_tcp_interface
+    interface_spec = re.sub(r'^tcp://', '', args.interface)
 
     with interface_opener(interface_spec) as interface:
         # For TCP interfaces, wait for a client connection before starting

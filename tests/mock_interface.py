@@ -9,8 +9,6 @@ class MockInterface(Interface):
 
         self.mock_responses = responses
 
-        self.serial = Mock(port='/dev/mock')
-
         self.legacy_firmware_detected = None
         self.legacy_firmware_version = None
 

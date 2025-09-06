@@ -12,7 +12,7 @@ logger = logging.getLogger('oec.args')
 def parse_args(args):
     parser = argparse.ArgumentParser(description='IBM 3270 terminal controller')
 
-    parser.add_argument('interface', help='serial port name or interface URL')
+    parser.add_argument('interface', help='TCP interface URL (format: tcp://host:port)')
     parser.add_argument('host', metavar='[lu[,lu...]@]host[:port]',
                         help='host and optional port and LUs')
     parser.add_argument('port', nargs='?', type=int, help=argparse.SUPPRESS)

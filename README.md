@@ -66,10 +66,10 @@ Install dependencies using `pip`:
 pip install -r requirements.txt
 ```
 
-Assuming your interface is connected to `/dev/ttyACM0` and you want to connect to a TN3270 host named `mainframe`:
+Assuming your interface is accessible via TCP at `192.168.1.100:8080` and you want to connect to a TN3270 host named `mainframe`:
 
 ```
-python -m oec /dev/ttyACM0 mainframe
+python -m oec tcp://192.168.1.100:8080 mainframe
 ```
 
 
