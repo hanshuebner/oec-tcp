@@ -300,15 +300,13 @@ class TN3270Session(Session):
         self._apply()
         apply_time = time.perf_counter()
 
-        flush_start = time.perf_counter()
-        self._flush()
-        flush_time = time.perf_counter()
+        # Note: Flush is now called before polling in the main loop to reduce latency
+        # by batching display updates instead of flushing immediately after each keystroke
 
-        total_render_time = (flush_time - render_start) * 1000
+        total_render_time = (apply_time - render_start) * 1000
         apply_duration = (apply_time - apply_start) * 1000
-        flush_duration = (flush_time - flush_start) * 1000
 
-        self.logger.debug(f'Render timing: total={total_render_time:.2f}ms, apply={apply_duration:.2f}ms, flush={flush_duration:.2f}ms')
+        self.logger.debug(f'Render timing: total={total_render_time:.2f}ms, apply={apply_duration:.2f}ms (flush deferred)')
 
     def _reset_insert(self):
         if not self.keyboard_insert:

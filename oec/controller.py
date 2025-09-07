@@ -109,6 +109,16 @@ class Controller:
         if poll_delay > 0:
             time.sleep(poll_delay)
 
+        # Flush any pending display updates before polling for new keystrokes
+        # This reduces latency by batching display updates instead of flushing immediately after each keystroke
+        if self.session_state == SessionState.ACTIVE and self.session:
+            flush_start = time.perf_counter()
+            self.session._flush()
+            flush_time = time.perf_counter()
+            if self.logger.isEnabledFor(logging.DEBUG):
+                flush_duration = (flush_time - flush_start) * 1000
+                self.logger.debug(f'Deferred flush: {flush_duration:.2f}ms')
+
         # POLL device.
         poll_start = time.perf_counter()
         self._poll_device()
