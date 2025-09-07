@@ -1,6 +1,6 @@
 more-itertools==8.13.0
 pycoax @ git+https://github.com/hanshuebner/coax@interface3#subdirectory=pycoax
-pytn3270 @ git+https://github.com/hanshuebner/pytn3270
+pytn3270==0.16.0
 sliplib==0.6.2
 sortedcontainers==2.4.0
 telnetlib3==2.0.4
