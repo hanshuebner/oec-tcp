@@ -4,6 +4,7 @@ oec.tn3270
 """
 
 import logging
+import ssl
 from tn3270 import Telnet, TN3270EFunction, Emulator, AttributeCell, CharacterCell, AID, Color, \
                    Highlight, OperatorError, ProtectedCellOperatorError, FieldOverflowOperatorError
 from tn3270.ebcdic import DUP, FM
@@ -47,7 +48,7 @@ AID_KEY_MAP = {
 class TN3270Session(Session):
     """TN3270 session."""
 
-    def __init__(self, terminal, host, port, device_names, character_encoding, tn3270e_profile):
+    def __init__(self, terminal, host, port, device_names, character_encoding, tn3270e_profile, ssl_enabled=False, ssl_no_verify=False):
         super().__init__(terminal)
 
         self.logger = logging.getLogger(__name__)
@@ -57,6 +58,8 @@ class TN3270Session(Session):
         self.device_names = device_names
         self.character_encoding = character_encoding
         self.tn3270e_profile = tn3270e_profile
+        self.ssl_enabled = ssl_enabled
+        self.ssl_no_verify = ssl_no_verify
 
         self.telnet = None
         self.emulator = None
@@ -196,7 +199,21 @@ class TN3270Session(Session):
 
         self.telnet = Telnet(terminal_type, **tn3270e_args)
 
-        self.telnet.open(self.host, self.port, self.device_names)
+        ssl_args = {}
+
+        if self.ssl_enabled:
+            ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+
+            if self.ssl_no_verify:
+                ssl_context.check_hostname = False
+                ssl_context.verify_mode = ssl.CERT_NONE
+            else:
+                ssl_context.load_default_certs()
+
+            ssl_args['ssl_context'] = ssl_context
+            ssl_args['ssl_server_hostname'] = self.host
+
+        self.telnet.open(self.host, self.port, self.device_names, **ssl_args)
 
         if self.telnet.is_tn3270e_negotiated:
             self.logger.info(f'TN3270E mode negotiated: Device Type = {self.telnet.device_type}, Device Name = {self.telnet.device_name}, Functions = {self.telnet.tn3270e_functions}')

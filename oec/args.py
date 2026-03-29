@@ -28,6 +28,13 @@ def parse_args(args, is_vt100_available):
                                dest='character_encoding', type=get_character_encoding,
                                help='host EBCDIC code page')
 
+    tn3270_parser.add_argument('--ssl', action='store_true', default=False,
+                               help='enable SSL/TLS')
+
+    tn3270_parser.add_argument('--ssl-no-verify', action='store_true', default=False,
+                               dest='ssl_no_verify',
+                               help='disable SSL/TLS certificate verification')
+
     tn3270_parser.add_argument('--tn3270e', choices=['off', 'basic', 'default'],
                                metavar='profile', default='default',
                                dest='tn3270e_profile',
