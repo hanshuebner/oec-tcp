@@ -75,7 +75,7 @@ def _create_device(args, interface, device_address, _poll_response):
 
 def _create_session(args, device):
     if args.emulator == 'tn3270':
-        return TN3270Session(device, args.host, args.port, args.device_names, args.character_encoding, args.tn3270e_profile, args.ssl, args.ssl_no_verify)
+        return TN3270Session(device, args.host, args.port, args.device_names, args.character_encoding, args.tn3270e_profile, args.ssl, args.starttls, args.ssl_no_verify)
 
     if args.emulator == 'vt100' and IS_VT100_AVAILABLE:
         host_command = [args.command, *args.command_args]
