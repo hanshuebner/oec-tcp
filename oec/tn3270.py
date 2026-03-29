@@ -48,7 +48,7 @@ AID_KEY_MAP = {
 class TN3270Session(Session):
     """TN3270 session."""
 
-    def __init__(self, terminal, host, port, device_names, character_encoding, tn3270e_profile, ssl_enabled=False, starttls_enabled=False, ssl_no_verify=False):
+    def __init__(self, terminal, host, port, device_names, character_encoding, tn3270e_profile, ssl_enabled=False, no_starttls=False, ssl_no_verify=False):
         super().__init__(terminal)
 
         self.logger = logging.getLogger(__name__)
@@ -59,7 +59,7 @@ class TN3270Session(Session):
         self.character_encoding = character_encoding
         self.tn3270e_profile = tn3270e_profile
         self.ssl_enabled = ssl_enabled
-        self.starttls_enabled = starttls_enabled
+        self.no_starttls = no_starttls
         self.ssl_no_verify = ssl_no_verify
 
         self.telnet = None
@@ -201,8 +201,9 @@ class TN3270Session(Session):
         self.telnet = Telnet(terminal_type, **tn3270e_args)
 
         ssl_args = {}
+        starttls_enabled = not self.ssl_enabled and not self.no_starttls
 
-        if self.ssl_enabled or self.starttls_enabled:
+        if self.ssl_enabled or starttls_enabled:
             ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
 
             if self.ssl_no_verify:

@@ -28,13 +28,12 @@ def parse_args(args, is_vt100_available):
                                dest='character_encoding', type=get_character_encoding,
                                help='host EBCDIC code page')
 
-    ssl_group = tn3270_parser.add_mutually_exclusive_group()
+    tn3270_parser.add_argument('--ssl', action='store_true', default=False,
+                               help='enable implicit SSL/TLS')
 
-    ssl_group.add_argument('--ssl', action='store_true', default=False,
-                           help='enable implicit SSL/TLS')
-
-    ssl_group.add_argument('--starttls', action='store_true', default=False,
-                           help='enable STARTTLS negotiation')
+    tn3270_parser.add_argument('--no-starttls', action='store_true', default=False,
+                               dest='no_starttls',
+                               help='disable STARTTLS negotiation')
 
     tn3270_parser.add_argument('--ssl-no-verify', action='store_true', default=False,
                                dest='ssl_no_verify',

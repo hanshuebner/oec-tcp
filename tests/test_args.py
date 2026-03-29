@@ -90,14 +90,13 @@ class ParseArgsTestCase(unittest.TestCase):
         args = parse_args(['/dev/ttyACM0', 'tn3270', 'host'], False)
 
         self.assertFalse(args.ssl)
-        self.assertFalse(args.starttls)
+        self.assertFalse(args.no_starttls)
         self.assertFalse(args.ssl_no_verify)
 
     def test_tn3270_ssl(self):
         args = parse_args(['/dev/ttyACM0', 'tn3270', '--ssl', 'host:992'], False)
 
         self.assertTrue(args.ssl)
-        self.assertFalse(args.starttls)
         self.assertFalse(args.ssl_no_verify)
 
     def test_tn3270_ssl_no_verify(self):
@@ -106,14 +105,8 @@ class ParseArgsTestCase(unittest.TestCase):
         self.assertTrue(args.ssl)
         self.assertTrue(args.ssl_no_verify)
 
-    def test_tn3270_starttls(self):
-        args = parse_args(['/dev/ttyACM0', 'tn3270', '--starttls', 'host:23'], False)
+    def test_tn3270_no_starttls(self):
+        args = parse_args(['/dev/ttyACM0', 'tn3270', '--no-starttls', 'host:23'], False)
 
         self.assertFalse(args.ssl)
-        self.assertTrue(args.starttls)
-
-    def test_tn3270_starttls_no_verify(self):
-        args = parse_args(['/dev/ttyACM0', 'tn3270', '--starttls', '--ssl-no-verify', 'host:23'], False)
-
-        self.assertTrue(args.starttls)
-        self.assertTrue(args.ssl_no_verify)
+        self.assertTrue(args.no_starttls)
