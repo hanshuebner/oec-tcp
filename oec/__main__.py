@@ -77,6 +77,9 @@ def _create_device(args, interface, device_address, _poll_response):
 
     terminal = Terminal(interface, device_address, terminal_id, extended_id, features, keymap)
 
+    if args.clicker:
+        terminal.keyboard.clicker = True
+
     return terminal
 
 def _create_session(args, device):

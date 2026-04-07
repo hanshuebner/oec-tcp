@@ -18,6 +18,9 @@ def parse_args(args, is_vt100_available):
                          dest='keyboard_language',
                          help='keyboard national layout (default: us)')
 
+    parser.add_argument('--clicker', action='store_true', default=False,
+                         help='enable keyboard clicker')
+
     subparsers = parser.add_subparsers(dest='emulator', required=True,
                                        description='emulator')
 
