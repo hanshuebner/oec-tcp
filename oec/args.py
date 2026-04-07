@@ -14,6 +14,10 @@ def parse_args(args, is_vt100_available):
 
     parser.add_argument('serial_port', help='serial port')
 
+    parser.add_argument('--keyboard-language', choices=['us', 'de'], default='us',
+                         dest='keyboard_language',
+                         help='keyboard national layout (default: us)')
+
     subparsers = parser.add_subparsers(dest='emulator', required=True,
                                        description='emulator')
 

@@ -20,6 +20,7 @@ if os.name == 'posix':
     IS_VT100_AVAILABLE = True
 
 from .keymap_3278_typewriter import KEYMAP as KEYMAP_3278_TYPEWRITER
+from .keymap_3278_typewriter_de import KEYMAP as KEYMAP_3278_TYPEWRITER_DE
 from .keymap_ibm_typewriter import KEYMAP as KEYMAP_IBM_TYPEWRITER
 from .keymap_ibm_enhanced import KEYMAP as KEYMAP_IBM_ENHANCED
 
@@ -27,9 +28,14 @@ logging.basicConfig(level=logging.INFO)
 
 logger = logging.getLogger('oec.main')
 
-def _get_keymap(_args, keyboard_description):
+KEYMAP_3278_LANGUAGE = {
+    'us': KEYMAP_3278_TYPEWRITER,
+    'de': KEYMAP_3278_TYPEWRITER_DE
+}
+
+def _get_keymap(args, keyboard_description):
     if keyboard_description.startswith('3278'):
-        return KEYMAP_3278_TYPEWRITER
+        return KEYMAP_3278_LANGUAGE.get(args.keyboard_language, KEYMAP_3278_TYPEWRITER)
 
     if keyboard_description.startswith('IBM-TYPEWRITER'):
         return KEYMAP_IBM_TYPEWRITER
