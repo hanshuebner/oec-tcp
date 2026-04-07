@@ -15,6 +15,7 @@ KEYMAP_DEFAULT = {
     17: Key.SINGLE_QUOTE,   # was EQUAL
 
     # Second Row
+    120: Key.LOWER_Z,        # was LOWER_Y
     27: Key.LOWER_U_UMLAUT, # was CENT
     21: Key.PLUS,            # was BACKSLASH
 
@@ -24,6 +25,7 @@ KEYMAP_DEFAULT = {
     15: Key.HASH,            # was LEFT_BRACE
 
     # Fourth Row
+    121: Key.LOWER_Y,  # was LOWER_Z
     51: Key.COMMA,  # unchanged
     50: Key.PERIOD, # unchanged
     20: Key.MINUS,  # was SLASH
@@ -45,6 +47,7 @@ KEYMAP_SHIFT = {
     17: Key.BACKTICK,     # was PLUS
 
     # Second Row
+    120: Key.UPPER_Z,        # was UPPER_Y
     27: Key.UPPER_U_UMLAUT, # was EXCLAMATION
     21: Key.ASTERISK,       # was BROKEN_BAR
 
@@ -54,6 +57,7 @@ KEYMAP_SHIFT = {
     15: Key.CARET,           # was RIGHT_BRACE
 
     # Fourth Row
+    121: Key.UPPER_Y,    # was UPPER_Z
     51: Key.SEMICOLON,  # was COMMA
     50: Key.COLON,      # was CENTER_PERIOD
     20: Key.UNDERSCORE, # was QUESTION
