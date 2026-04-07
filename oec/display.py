@@ -324,6 +324,14 @@ class BufferedDisplay(Display):
         return [(self.dirty[0], self.dirty[-1])]
 
 CHAR_MAP = {
+    # GE/APL plane (0x40-0x7F) - multinational accented characters
+    'ä': 0x50,
+    'ö': 0x53,
+    'ü': 0x54,
+    'Ä': 0x70,
+    'Ö': 0x73,
+    'Ü': 0x74,
+
     '>': 0x08,
     '<': 0x09,
     '[': 0x0a,
