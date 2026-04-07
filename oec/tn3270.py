@@ -98,6 +98,10 @@ class TN3270Session(Session):
     def fileno(self):
         return self.emulator.stream.socket.fileno()
 
+    def has_pending_data(self):
+        sock = self.emulator.stream.socket
+        return isinstance(sock, ssl.SSLSocket) and sock.pending() > 0
+
     def handle_host(self):
         try:
             if not self.emulator.update(timeout=0):
