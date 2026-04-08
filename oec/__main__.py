@@ -24,7 +24,12 @@ from .keymap_3278_typewriter_de import KEYMAP as KEYMAP_3278_TYPEWRITER_DE
 from .keymap_ibm_typewriter import KEYMAP as KEYMAP_IBM_TYPEWRITER
 from .keymap_ibm_enhanced import KEYMAP as KEYMAP_IBM_ENHANCED
 
-logging.basicConfig(level=logging.INFO)
+_LOG_LEVELS = {
+    'debug': logging.DEBUG,
+    'info': logging.INFO,
+    'warning': logging.WARNING,
+    'error': logging.ERROR,
+}
 
 logger = logging.getLogger('oec.main')
 
@@ -96,6 +101,8 @@ def _create_session(args, device):
 
 def main():
     args = parse_args(sys.argv[1:], IS_VT100_AVAILABLE)
+
+    logging.basicConfig(level=_LOG_LEVELS[args.log_level])
 
     def create_device(interface, device_address, poll_response):
         return _create_device(args, interface, device_address, poll_response)
