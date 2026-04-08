@@ -48,7 +48,7 @@ AID_KEY_MAP = {
 class TN3270Session(Session):
     """TN3270 session."""
 
-    def __init__(self, terminal, host, port, device_names, character_encoding, tn3270e_profile, ssl_enabled=False, no_starttls=False, ssl_no_verify=False):
+    def __init__(self, terminal, host, port, device_names, character_encoding, tn3270e_profile, ssl_enabled=False, no_starttls=False, ssl_no_verify=False, no_hostname_status=False):
         super().__init__(terminal)
 
         self.logger = logging.getLogger(__name__)
@@ -61,6 +61,7 @@ class TN3270Session(Session):
         self.ssl_enabled = ssl_enabled
         self.no_starttls = no_starttls
         self.ssl_no_verify = ssl_no_verify
+        self.no_hostname_status = no_hostname_status
 
         self.telnet = None
         self.emulator = None
@@ -75,6 +76,11 @@ class TN3270Session(Session):
 
     def start(self):
         self._connect_host()
+
+        self._write_security_status()
+
+        if not self.no_hostname_status:
+            self._write_hostname_status()
 
         (rows, columns) = self.terminal.display.dimensions
 
@@ -229,6 +235,23 @@ class TN3270Session(Session):
             self.logger.info(f'TN3270E mode negotiated: Device Type = {self.telnet.device_type}, Device Name = {self.telnet.device_name}, Functions = {self.telnet.tn3270e_functions}')
         else:
             self.logger.debug('Unable to negotiate TN3270E mode')
+
+    def _write_security_status(self):
+        is_secure = isinstance(self.telnet.socket, ssl.SSLSocket)
+
+        self.terminal.display.status_line.write_string(17, 'encrypted' if is_secure else 'unencrypted')
+
+    def _write_hostname_status(self):
+        status_column = 46
+        columns = self.terminal.display.status_line.columns
+        max_length = columns - status_column
+
+        if self.port == 23:
+            text = self.host
+        else:
+            text = f'{self.host}:{self.port}'
+
+        self.terminal.display.status_line.write_string(status_column, text[:max_length].rjust(max_length))
 
     def _disconnect_host(self):
         self.telnet.close()

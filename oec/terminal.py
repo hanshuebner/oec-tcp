@@ -50,8 +50,9 @@ class Terminal(Device):
 
         self.display.clear(clear_status_line=True)
 
-        # Show the attached indicator on the status line.
-        self.display.status_line.write_string(0, 'OEC')
+        # Show the attached indicator on the status line, padded to full width.
+        columns = self.display.status_line.columns
+        self.display.status_line.write_string(0, 'OEC'.ljust(columns))
 
         self.display.move_cursor(row=0, column=0)
 

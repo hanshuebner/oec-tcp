@@ -46,6 +46,10 @@ def parse_args(args, is_vt100_available):
                                dest='ssl_no_verify',
                                help='disable SSL/TLS certificate verification')
 
+    tn3270_parser.add_argument('--no-hostname-status', action='store_true', default=False,
+                               dest='no_hostname_status',
+                               help='do not display host name on status line')
+
     tn3270_parser.add_argument('--tn3270e', choices=['off', 'basic', 'default'],
                                metavar='profile', default='default',
                                dest='tn3270e_profile',
