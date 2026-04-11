@@ -239,7 +239,7 @@ class TN3270Session(Session):
     def _write_security_status(self):
         is_secure = isinstance(self.telnet.socket, ssl.SSLSocket)
 
-        self.terminal.display.status_line.write_string(17, 'encrypted' if is_secure else 'unencrypted')
+        self.terminal.display.status_line.write_string(20, 'encrypted' if is_secure else 'unencrypted')
 
     def _write_hostname_status(self):
         status_column = 46
